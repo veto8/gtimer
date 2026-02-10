@@ -1,0 +1,15 @@
+.timer-display {
+    font-size: 48pt;
+    font-weight: bold;
+    font-family: monospace;
+    margin: 24px;
+}
+
+.task-list-row {
+    padding: 8px;
+}
+
+.pill {
+    border-radius: 9999px;
+    padding: 24px;
+}

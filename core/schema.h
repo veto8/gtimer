@@ -1,0 +1,37 @@
+#ifndef GTIMER_SCHEMA_H
+#define GTIMER_SCHEMA_H
+
+static const char *schema_sql = 
+  "PRAGMA foreign_keys = ON;"
+  "CREATE TABLE IF NOT EXISTS projects ("
+  "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+  "  name TEXT NOT NULL,"
+  "  created_at INTEGER DEFAULT (strftime('%s', 'now'))"
+  ");"
+  ""
+  "CREATE TABLE IF NOT EXISTS tasks ("
+  "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+  "  project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,"
+  "  name TEXT NOT NULL,"
+  "  is_hidden INTEGER DEFAULT 0,"
+  "  is_timing INTEGER DEFAULT 0,"
+  "  last_start_time INTEGER,"
+  "  created_at INTEGER DEFAULT (strftime('%s', 'now'))"
+  ");"
+  ""
+  "CREATE TABLE IF NOT EXISTS daily_time ("
+  "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+  "  task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,"
+  "  date TEXT NOT NULL," /* ISO 8601 date: 'YYYY-MM-DD' */
+  "  seconds INTEGER DEFAULT 0,"
+  "  UNIQUE(task_id, date)"
+  ");"
+  ""
+  "CREATE TABLE IF NOT EXISTS annotations ("
+  "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+  "  task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,"
+  "  created_at INTEGER NOT NULL,"
+  "  text TEXT NOT NULL"
+  ");";
+
+#endif

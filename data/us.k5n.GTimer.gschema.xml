@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="gtimer">
+  <schema id="us.k5n.GTimer" path="/us/k5n/GTimer/">
+    <key name="window-width" type="i">
+      <default>600</default>
+      <summary>Window width</summary>
+    </key>
+    <key name="window-height" type="i">
+      <default>450</default>
+      <summary>Window height</summary>
+    </key>
+    <key name="auto-save" type="b">
+      <default>true</default>
+      <summary>Enable auto-save</summary>
+    </key>
+    <key name="animate-running-tasks" type="b">
+      <default>true</default>
+      <summary>Animate running tasks</summary>
+    </key>
+    <key name="resume-on-startup" type="b">
+      <default>false</default>
+      <summary>Resume timing on startup</summary>
+    </key>
+    <key name="enable-idle-detection" type="b">
+      <default>true</default>
+      <summary>Enable idle detection</summary>
+    </key>
+    <key name="idle-threshold" type="i">
+      <default>15</default>
+      <summary>Idle threshold in minutes</summary>
+    </key>
+    <key name="midnight-offset" type="i">
+      <default>0</default>
+      <summary>Midnight offset in hours</summary>
+    </key>
+    <key name="week-start-day" type="i">
+      <default>1</default>
+      <summary>Week start day (0=Sunday, 1=Monday)</summary>
+    </key>
+  </schema>
+</schemalist>

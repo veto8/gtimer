@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=GTimer
+Comment=Time tracking application
+Exec=gtimer
+Icon=us.k5n.GTimer
+Terminal=false
+Type=Application
+Categories=Office;Utility;GTK;
+StartupNotify=true
+StartupWMClass=us.k5n.GTimer
+DBusActivatable=true
+X-GNOME-UsesNotifications=true

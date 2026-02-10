@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>us.k5n.GTimer</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-2.0+</project_license>
+  <name>GTimer</name>
+  <summary>Track time spent on tasks and projects</summary>
+  <description>
+    <p>
+      GTimer is a lightweight time tracking application for the GNOME desktop.
+      It allows you to manage multiple tasks, group them into projects, and
+      track your daily and total time spent on each.
+    </p>
+    <ul>
+      <li>Simple daily-total time tracking model</li>
+      <li>Support for multiple projects and tasks</li>
+      <li>Keyboard-friendly interface with shortcuts</li>
+      <li>Reports and annotations</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">org.craigknudsen.GTimer.desktop</launchable>
+  <screenshots>
+    <!-- Add screenshots when available -->
+  </screenshots>
+  <url type="homepage">http://www.k5n.us/gtimer.php</url>
+  <releases>
+    <release version="3.0.0" date="2026-02-09">
+      <description>
+        <p>Complete rewrite with GTK 4 and Libadwaita</p>
+      </description>
+    </release>
+  </releases>
+  <content_rating type="oars-1.1" />
+</component>

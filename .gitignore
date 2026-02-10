@@ -7,3 +7,17 @@ config.log
 config.status
 gtimer
 *.bak
+
+# Meson / Ninja
+build/
+.mesonpy/
+
+# GSettings
+data/gschemas.compiled
+
+# IDEs
+.cache/
+.vscode/
+
+# Local logs
+debug.txt

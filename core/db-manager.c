@@ -1,0 +1,479 @@
+#include "db-manager.h"
+#include "schema.h"
+#include "project-object.h"
+#include "task-object.h"
+#include <stdio.h>
+#include <time.h>
+
+struct _GTimerDBManager {
+  sqlite3 *db;
+};
+
+static char *
+get_today_date_string (void)
+{
+  time_t t = time (NULL);
+  struct tm *tm = localtime (&t);
+  char buf[11];
+  strftime (buf, sizeof (buf), "%Y-%m-%d", tm);
+  return g_strdup (buf);
+}
+
+GTimerDBManager *
+gtimer_db_manager_new (const char *path, GError **error)
+{
+  GTimerDBManager *self;
+  int rc;
+  char *errmsg = NULL;
+
+  self = g_new0 (GTimerDBManager, 1);
+
+  rc = sqlite3_open (path, &self->db);
+  if (rc != SQLITE_OK) {
+    g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                 "Failed to open database: %s", sqlite3_errmsg (self->db));
+    sqlite3_close (self->db);
+    g_free (self);
+    return NULL;
+  }
+
+  rc = sqlite3_exec (self->db, "PRAGMA foreign_keys = ON;", NULL, NULL, &errmsg);
+  if (rc != SQLITE_OK) {
+    g_warning ("Failed to enable foreign keys: %s", errmsg);
+    sqlite3_free (errmsg);
+  }
+
+  g_printerr ("DEBUG: gtimer_db_manager_new: Initializing schema\n");
+  rc = sqlite3_exec (self->db, schema_sql, NULL, NULL, &errmsg);
+  if (rc != SQLITE_OK) {
+    g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                 "Failed to initialize schema: %s", errmsg);
+    g_printerr ("DEBUG: Failed to initialize schema: %s\n", errmsg);
+    sqlite3_free (errmsg);
+    sqlite3_close (self->db);
+    g_free (self);
+    return NULL;
+  }
+
+  // Ensure tasks table has all required columns (migration)
+  g_printerr ("DEBUG: gtimer_db_manager_new: Running migrations if needed\n");
+  rc = sqlite3_exec (self->db, "ALTER TABLE tasks ADD COLUMN is_hidden INTEGER DEFAULT 0;", NULL, NULL, &errmsg);
+  if (rc != SQLITE_OK) {
+    g_printerr ("DEBUG: Migration is_hidden result: %s\n", errmsg);
+    sqlite3_free (errmsg);
+  } else {
+    g_printerr ("DEBUG: Migration is_hidden: Added column\n");
+  }
+  
+  rc = sqlite3_exec (self->db, "ALTER TABLE tasks ADD COLUMN is_timing INTEGER DEFAULT 0;", NULL, NULL, &errmsg);
+  if (rc != SQLITE_OK) {
+    g_printerr ("DEBUG: Migration is_timing result: %s\n", errmsg);
+    sqlite3_free (errmsg);
+  } else {
+    g_printerr ("DEBUG: Migration is_timing: Added column\n");
+  }
+
+  rc = sqlite3_exec (self->db, "ALTER TABLE tasks ADD COLUMN last_start_time INTEGER;", NULL, NULL, &errmsg);
+  if (rc != SQLITE_OK) {
+    g_printerr ("DEBUG: Migration last_start_time result: %s\n", errmsg);
+    sqlite3_free (errmsg);
+  } else {
+    g_printerr ("DEBUG: Migration last_start_time: Added column\n");
+  }
+
+  return self;
+}
+
+void
+gtimer_db_manager_free (GTimerDBManager *self)
+{
+  if (self) {
+    sqlite3_close (self->db);
+    g_free (self);
+  }
+}
+
+sqlite3 *
+gtimer_db_manager_get_db (GTimerDBManager *self)
+{
+  return self->db;
+}
+
+void
+gtimer_db_manager_create_task (GTimerDBManager *self, const char *name, int project_id)
+{
+  sqlite3_stmt *stmt;
+  int rc;
+
+  g_printerr ("DEBUG: Creating task: '%s' (project_id: %d)\n", name, project_id);
+
+  rc = sqlite3_prepare_v2 (self->db, "INSERT INTO tasks (name, project_id) VALUES (?, ?);", -1, &stmt, NULL);
+  if (rc != SQLITE_OK) {
+    g_printerr ("DEBUG: Failed to prepare task insert: %s\n", sqlite3_errmsg (self->db));
+    return;
+  }
+
+  sqlite3_bind_text (stmt, 1, name, -1, SQLITE_TRANSIENT);
+  if (project_id != -1)
+    sqlite3_bind_int (stmt, 2, project_id);
+  else
+    sqlite3_bind_null (stmt, 2);
+
+  rc = sqlite3_step (stmt);
+  if (rc != SQLITE_DONE) {
+    g_printerr ("DEBUG: Failed to execute task insert: %s\n", sqlite3_errmsg (self->db));
+  } else {
+    g_printerr ("DEBUG: Task inserted successfully.\n");
+  }
+  sqlite3_finalize (stmt);
+}
+
+void
+gtimer_db_manager_update_task (GTimerDBManager *self, int task_id, const char *name, int project_id)
+{
+  sqlite3_stmt *stmt;
+  const char *sql = "UPDATE tasks SET name = ?, project_id = ? WHERE id = ?;";
+
+  if (sqlite3_prepare_v2 (self->db, sql, -1, &stmt, NULL) == SQLITE_OK) {
+    sqlite3_bind_text (stmt, 1, name, -1, SQLITE_TRANSIENT);
+    if (project_id != -1)
+      sqlite3_bind_int (stmt, 2, project_id);
+    else
+      sqlite3_bind_null (stmt, 2);
+    sqlite3_bind_int (stmt, 3, task_id);
+    sqlite3_step (stmt);
+    sqlite3_finalize (stmt);
+  }
+}
+
+void
+gtimer_db_manager_delete_task (GTimerDBManager *self, int task_id)
+{
+  sqlite3_stmt *stmt;
+  const char *sql = "DELETE FROM tasks WHERE id = ?;";
+
+  if (sqlite3_prepare_v2 (self->db, sql, -1, &stmt, NULL) == SQLITE_OK) {
+    sqlite3_bind_int (stmt, 1, task_id);
+    sqlite3_step (stmt);
+    sqlite3_finalize (stmt);
+  }
+}
+
+void
+gtimer_db_manager_hide_task (GTimerDBManager *self, int task_id, gboolean hidden)
+{
+  sqlite3_stmt *stmt;
+  const char *sql = "UPDATE tasks SET is_hidden = ? WHERE id = ?;";
+
+  if (sqlite3_prepare_v2 (self->db, sql, -1, &stmt, NULL) == SQLITE_OK) {
+    sqlite3_bind_int (stmt, 1, hidden ? 1 : 0);
+    sqlite3_bind_int (stmt, 2, task_id);
+    sqlite3_step (stmt);
+    sqlite3_finalize (stmt);
+  }
+}
+
+void
+gtimer_db_manager_create_project (GTimerDBManager *self, const char *name)
+{
+  sqlite3_stmt *stmt;
+  const char *sql = "INSERT INTO projects (name) VALUES (?);";
+
+  if (sqlite3_prepare_v2 (self->db, sql, -1, &stmt, NULL) == SQLITE_OK) {
+    sqlite3_bind_text (stmt, 1, name, -1, SQLITE_TRANSIENT);
+    sqlite3_step (stmt);
+    sqlite3_finalize (stmt);
+  }
+}
+
+void
+gtimer_db_manager_update_project (GTimerDBManager *self, int project_id, const char *name)
+{
+  sqlite3_stmt *stmt;
+  const char *sql = "UPDATE projects SET name = ? WHERE id = ?;";
+
+  if (sqlite3_prepare_v2 (self->db, sql, -1, &stmt, NULL) == SQLITE_OK) {
+    sqlite3_bind_text (stmt, 1, name, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int (stmt, 2, project_id);
+    sqlite3_step (stmt);
+    sqlite3_finalize (stmt);
+  }
+}
+
+GList *
+gtimer_db_manager_get_projects (GTimerDBManager *self)
+{
+  sqlite3_stmt *stmt;
+  GList *projects = NULL;
+  const char *sql = "SELECT id, name FROM projects ORDER BY name ASC;";
+
+  if (sqlite3_prepare_v2 (self->db, sql, -1, &stmt, NULL) != SQLITE_OK)
+    return NULL;
+
+  while (sqlite3_step (stmt) == SQLITE_ROW) {
+    int id = sqlite3_column_int (stmt, 0);
+    const char *name = (const char *)sqlite3_column_text (stmt, 1);
+    projects = g_list_append (projects, gtimer_project_new (id, name));
+  }
+
+  sqlite3_finalize (stmt);
+  return projects;
+}
+
+GList *
+gtimer_db_manager_get_hidden_tasks (GTimerDBManager *self)
+{
+  sqlite3_stmt *stmt;
+  GList *tasks = NULL;
+  const char *sql = 
+    "SELECT t.id, t.name, t.project_id, p.name, t.created_at "
+    "FROM tasks t "
+    "LEFT JOIN projects p ON t.project_id = p.id "
+    "WHERE t.is_hidden = 1 "
+    "ORDER BY t.name ASC;";
+
+  if (sqlite3_prepare_v2 (self->db, sql, -1, &stmt, NULL) != SQLITE_OK)
+    return NULL;
+
+  while (sqlite3_step (stmt) == SQLITE_ROW) {
+    int id = sqlite3_column_int (stmt, 0);
+    const char *name = (const char *)sqlite3_column_text (stmt, 1);
+    int project_id = sqlite3_column_int (stmt, 2);
+    const char *project_name = (const char *)sqlite3_column_text (stmt, 3);
+    gint64 created_at = sqlite3_column_int64 (stmt, 4);
+    tasks = g_list_append (tasks, gtimer_task_new (id, name, project_id, project_name, 0, 0, FALSE, TRUE, 0, created_at));
+  }
+
+  sqlite3_finalize (stmt);
+  return tasks;
+}
+
+void
+gtimer_report_row_free (GTimerReportRow *row)
+{
+  if (row) {
+    g_free (row->task_name);
+    g_free (row);
+  }
+}
+
+GList *
+gtimer_db_manager_get_daily_report (GTimerDBManager *self, int year, int month, int day)
+{
+  sqlite3_stmt *stmt;
+  GList *report = NULL;
+  char date_str[11];
+  snprintf (date_str, sizeof (date_str), "%04d-%02d-%02d", year, month, day);
+
+  const char *sql = 
+    "SELECT t.name, d.seconds "
+    "FROM tasks t "
+    "JOIN daily_time d ON t.id = d.task_id "
+    "WHERE d.date = ? "
+    "ORDER BY d.seconds DESC;";
+
+  if (sqlite3_prepare_v2 (self->db, sql, -1, &stmt, NULL) != SQLITE_OK)
+    return NULL;
+
+  sqlite3_bind_text (stmt, 1, date_str, -1, SQLITE_STATIC);
+
+  while (sqlite3_step (stmt) == SQLITE_ROW) {
+    GTimerReportRow *row = g_new0 (GTimerReportRow, 1);
+    row->task_name = g_strdup ((const char *)sqlite3_column_text (stmt, 0));
+    row->total_duration = sqlite3_column_int64 (stmt, 1);
+    report = g_list_append (report, row);
+  }
+
+  sqlite3_finalize (stmt);
+  return report;
+}
+
+gint64
+gtimer_db_manager_get_task_total_time (GTimerDBManager *self, int task_id)
+{
+  sqlite3_stmt *stmt;
+  gint64 total_time = 0;
+  
+  const char *sql = "SELECT SUM(seconds) FROM daily_time WHERE task_id = ?;";
+  if (sqlite3_prepare_v2 (self->db, sql, -1, &stmt, NULL) != SQLITE_OK)
+    return 0;
+  
+  sqlite3_bind_int (stmt, 1, task_id);
+  
+  if (sqlite3_step (stmt) == SQLITE_ROW) {
+    total_time = sqlite3_column_int64 (stmt, 0);
+  }
+  
+  sqlite3_finalize (stmt);
+  return total_time;
+}
+
+gint64
+gtimer_db_manager_get_task_today_time (GTimerDBManager *self, int task_id)
+{
+  sqlite3_stmt *stmt;
+  gint64 today_time = 0;
+  char *date_str = get_today_date_string ();
+  
+  const char *sql = "SELECT seconds FROM daily_time WHERE task_id = ? AND date = ?;";
+  if (sqlite3_prepare_v2 (self->db, sql, -1, &stmt, NULL) == SQLITE_OK) {
+    sqlite3_bind_int (stmt, 1, task_id);
+    sqlite3_bind_text (stmt, 2, date_str, -1, SQLITE_TRANSIENT);
+    
+    if (sqlite3_step (stmt) == SQLITE_ROW) {
+      today_time = sqlite3_column_int64 (stmt, 0);
+    }
+    sqlite3_finalize (stmt);
+  }
+  g_free (date_str);
+  return today_time;
+}
+
+void
+gtimer_db_manager_add_task_time (GTimerDBManager *self, int task_id, gint64 seconds)
+{
+  sqlite3_stmt *stmt;
+  char *date_str = get_today_date_string ();
+  
+  const char *sql = 
+    "INSERT INTO daily_time (task_id, date, seconds) VALUES (?, ?, ?) "
+    "ON CONFLICT(task_id, date) DO UPDATE SET seconds = seconds + excluded.seconds;";
+
+  if (sqlite3_prepare_v2 (self->db, sql, -1, &stmt, NULL) == SQLITE_OK) {
+    sqlite3_bind_int (stmt, 1, task_id);
+    sqlite3_bind_text (stmt, 2, date_str, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int64 (stmt, 3, seconds);
+    sqlite3_step (stmt);
+    sqlite3_finalize (stmt);
+  }
+  g_free (date_str);
+}
+
+void
+gtimer_db_manager_set_task_today_time (GTimerDBManager *self, int task_id, gint64 seconds)
+{
+  sqlite3_stmt *stmt;
+  char *date_str = get_today_date_string ();
+  
+  const char *sql = 
+    "INSERT INTO daily_time (task_id, date, seconds) VALUES (?, ?, ?) "
+    "ON CONFLICT(task_id, date) DO UPDATE SET seconds = excluded.seconds;";
+
+  if (sqlite3_prepare_v2 (self->db, sql, -1, &stmt, NULL) == SQLITE_OK) {
+    sqlite3_bind_int (stmt, 1, task_id);
+    sqlite3_bind_text (stmt, 2, date_str, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int64 (stmt, 3, seconds);
+    sqlite3_step (stmt);
+    sqlite3_finalize (stmt);
+  }
+  g_free (date_str);
+}
+
+void
+gtimer_db_manager_start_task_timing (GTimerDBManager *self, int task_id)
+{
+  sqlite3_stmt *stmt;
+  
+  const char *sql = "UPDATE tasks SET is_timing = 1, last_start_time = strftime('%s', 'now') WHERE id = ?;";
+  if (sqlite3_prepare_v2 (self->db, sql, -1, &stmt, NULL) == SQLITE_OK) {
+    sqlite3_bind_int (stmt, 1, task_id);
+    sqlite3_step (stmt);
+    sqlite3_finalize (stmt);
+  }
+}
+
+void
+gtimer_db_manager_stop_task_timing (GTimerDBManager *self, int task_id)
+{
+  sqlite3_stmt *stmt;
+  gint64 elapsed = 0;
+
+  // Calculate elapsed time
+  const char *query_sql = "SELECT strftime('%s', 'now') - last_start_time FROM tasks WHERE id = ? AND is_timing = 1;";
+  if (sqlite3_prepare_v2 (self->db, query_sql, -1, &stmt, NULL) == SQLITE_OK) {
+    sqlite3_bind_int (stmt, 1, task_id);
+    if (sqlite3_step (stmt) == SQLITE_ROW) {
+      elapsed = sqlite3_column_int64 (stmt, 0);
+    }
+    sqlite3_finalize (stmt);
+  }
+
+  if (elapsed > 0) {
+    gtimer_db_manager_add_task_time (self, task_id, elapsed);
+  }
+
+  const char *update_sql = "UPDATE tasks SET is_timing = 0 WHERE id = ?;";
+  if (sqlite3_prepare_v2 (self->db, update_sql, -1, &stmt, NULL) == SQLITE_OK) {
+    sqlite3_bind_int (stmt, 1, task_id);
+    sqlite3_step (stmt);
+    sqlite3_finalize (stmt);
+  }
+}
+
+gboolean
+gtimer_db_manager_is_task_timing (GTimerDBManager *self, int task_id)
+{
+  sqlite3_stmt *stmt;
+  gboolean is_timing = FALSE;
+  
+  const char *sql = "SELECT is_timing FROM tasks WHERE id = ?;";
+  if (sqlite3_prepare_v2 (self->db, sql, -1, &stmt, NULL) != SQLITE_OK)
+    return FALSE;
+  
+  sqlite3_bind_int (stmt, 1, task_id);
+  
+  if (sqlite3_step (stmt) == SQLITE_ROW) {
+    is_timing = sqlite3_column_int (stmt, 0) != 0;
+  }
+  
+  sqlite3_finalize (stmt);
+  return is_timing;
+}
+
+GList *
+gtimer_db_manager_get_annotations (GTimerDBManager *self, int task_id)
+{
+  sqlite3_stmt *stmt;
+  GList *annotations = NULL;
+
+  const char *sql = "SELECT id, created_at, text FROM annotations WHERE task_id = ? ORDER BY created_at DESC;";
+  if (sqlite3_prepare_v2 (self->db, sql, -1, &stmt, NULL) != SQLITE_OK)
+    return NULL;
+
+  sqlite3_bind_int (stmt, 1, task_id);
+
+  while (sqlite3_step (stmt) == SQLITE_ROW) {
+    GTimerAnnotation *ann = g_new0 (GTimerAnnotation, 1);
+    ann->id = sqlite3_column_int64 (stmt, 0);
+    ann->task_id = task_id;
+    ann->created_at = sqlite3_column_int64 (stmt, 1);
+    ann->text = g_strdup ((const char *)sqlite3_column_text (stmt, 2));
+    annotations = g_list_append (annotations, ann);
+  }
+
+  sqlite3_finalize (stmt);
+  return annotations;
+}
+
+void
+gtimer_db_manager_add_annotation (GTimerDBManager *self, int task_id, const char *text)
+{
+  sqlite3_stmt *stmt;
+  const char *sql = "INSERT INTO annotations (task_id, created_at, text) VALUES (?, strftime('%s', 'now'), ?);";
+
+  if (sqlite3_prepare_v2 (self->db, sql, -1, &stmt, NULL) == SQLITE_OK) {
+    sqlite3_bind_int (stmt, 1, task_id);
+    sqlite3_bind_text (stmt, 2, text, -1, SQLITE_TRANSIENT);
+    sqlite3_step (stmt);
+    sqlite3_finalize (stmt);
+  }
+}
+
+void
+gtimer_annotation_free (GTimerAnnotation *annotation)
+{
+  if (annotation) {
+    g_free (annotation->text);
+    g_free (annotation);
+  }
+}

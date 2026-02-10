@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- GNOME-style squircle background -->
+  <rect x="8" y="8" width="112" height="112" rx="24" ry="24" fill="#3584e4"/>
+  
+  <!-- Inset for the clock face -->
+  <circle cx="64" cy="64" r="44" fill="#ffffff"/>
+  
+  <!-- Outer ring -->
+  <circle cx="64" cy="64" r="44" fill="none" stroke="#241f31" stroke-width="4"/>
+  
+  <!-- Ticks -->
+  <g stroke="#9a9996" stroke-width="2" stroke-linecap="round">
+    <path d="M64 28v8M64 100v-8M100 64h-8M28 64h8"/>
+  </g>
+  
+  <!-- Center pin -->
+  <circle cx="64" cy="64" r="4" fill="#241f31"/>
+  
+  <!-- Red needle (motion indicator) -->
+  <path d="M64 64 L84 36" stroke="#e01b24" stroke-width="4" stroke-linecap="round"/>
+  
+  <!-- Accent button on top of squircle -->
+  <rect x="54" y="4" width="20" height="8" rx="4" fill="#9a9996" stroke="#241f31" stroke-width="2"/>
+</svg>
