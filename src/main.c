@@ -47,6 +47,36 @@ activate (GtkApplication *app,
   gtk_window_present (GTK_WINDOW (window));
 }
 
+static GFile *last_save_folder = NULL;
+
+static void
+on_html_save_response (GtkNativeDialog *native, int response_id, gpointer user_data)
+{
+  char *report_text = user_data;
+  if (response_id == GTK_RESPONSE_ACCEPT) {
+    GtkFileChooser *chooser = GTK_FILE_CHOOSER (native);
+    GFile *file = gtk_file_chooser_get_file (chooser);
+    if (file) {
+      // Save the folder for next time
+      g_clear_object (&last_save_folder);
+      last_save_folder = g_file_get_parent (file);
+
+      GError *err = NULL;
+      if (g_file_replace_contents (file, report_text, strlen (report_text), NULL, FALSE, G_FILE_CREATE_NONE, NULL, NULL, &err)) {
+        char *uri = g_file_get_uri (file);
+        gtk_show_uri (gtk_native_dialog_get_transient_for (native), uri, GDK_CURRENT_TIME);
+        g_free (uri);
+      } else {
+        g_warning ("Failed to save HTML report: %s", err->message);
+        g_clear_error (&err);
+      }
+      g_object_unref (file);
+    }
+  }
+  g_free (report_text);
+  g_object_unref (native);
+}
+
 static void
 on_report_dialog_response (GtkDialog *dialog, int response_id, gpointer user_data)
 {
@@ -56,6 +86,7 @@ on_report_dialog_response (GtkDialog *dialog, int response_id, gpointer user_dat
     GtkWindow *parent = gtk_application_get_active_window (app);
     GtkWidget *content_area = gtk_dialog_get_content_area (dialog);
     GtkDropDown *round_dropdown = g_object_get_data (G_OBJECT (content_area), "round-dropdown");
+    GtkDropDown *format_dropdown = g_object_get_data (G_OBJECT (content_area), "format-dropdown");
     
     int rounding = 0;
     guint selected = gtk_drop_down_get_selected (round_dropdown);
@@ -69,14 +100,40 @@ on_report_dialog_response (GtkDialog *dialog, int response_id, gpointer user_dat
       default: rounding = 0; break;
     }
 
+    GTimerReportFormat format = GTIMER_REPORT_TEXT;
+    if (gtk_drop_down_get_selected (format_dropdown) == 1) {
+      format = GTIMER_REPORT_HTML;
+    }
+
     GDateTime *now = g_date_time_new_now_local ();
     char *report_text = gtimer_report_generate (gtimer_app->db_manager,
                                                 GTIMER_REPORT_DAILY,
-                                                GTIMER_REPORT_TEXT,
+                                                format,
                                                 now, now, NULL, rounding);
     
-    GTimerReportWindow *report_window = gtimer_report_window_new (parent, "Report", report_text);
-    gtk_window_present (GTK_WINDOW (report_window));
+    if (format == GTIMER_REPORT_HTML) {
+      GtkFileChooserNative *native = gtk_file_chooser_native_new ("Save HTML Report",
+                                                                  parent,
+                                                                  GTK_FILE_CHOOSER_ACTION_SAVE,
+                                                                  "_Save",
+                                                                  "_Cancel");
+      
+      char *date_slug = g_date_time_format (now, "%Y%m%d");
+      char *default_filename = g_strdup_printf ("gtimer-report-%s.html", date_slug);
+      gtk_file_chooser_set_current_name (GTK_FILE_CHOOSER (native), default_filename);
+      g_free (default_filename);
+      g_free (date_slug);
+
+      if (last_save_folder) {
+        gtk_file_chooser_set_current_folder (GTK_FILE_CHOOSER (native), last_save_folder, NULL);
+      }
+
+      g_signal_connect (native, "response", G_CALLBACK (on_html_save_response), g_strdup (report_text));
+      gtk_native_dialog_show (GTK_NATIVE_DIALOG (native));
+    } else {
+      GTimerReportWindow *report_window = gtimer_report_window_new (parent, "Report", report_text);
+      gtk_window_present (GTK_WINDOW (report_window));
+    }
     
     g_free (report_text);
     g_date_time_unref (now);
@@ -138,6 +195,14 @@ on_report_action (GSimpleAction *action,
   gtk_box_append (GTK_BOX (round_box), GTK_WIDGET (round_dropdown));
   gtk_box_append (GTK_BOX (content_area), round_box);
 
+  // Format
+  GtkWidget *format_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
+  gtk_box_append (GTK_BOX (format_box), gtk_label_new ("Format:"));
+  GtkStringList *format_list = gtk_string_list_new ((const char *[]) {"Plain Text", "HTML", NULL});
+  GtkDropDown *format_dropdown = GTK_DROP_DOWN (gtk_drop_down_new (G_LIST_MODEL (format_list), NULL));
+  gtk_box_append (GTK_BOX (format_box), GTK_WIDGET (format_dropdown));
+  gtk_box_append (GTK_BOX (content_area), format_box);
+
   // Task Selection (Checkbox list)
   gtk_box_append (GTK_BOX (content_area), gtk_label_new ("Tasks:"));
   GtkWidget *scrolled = gtk_scrolled_window_new ();
@@ -165,12 +230,13 @@ on_report_action (GSimpleAction *action,
 
   g_object_set_data (G_OBJECT (content_area), "range-dropdown", range_dropdown);
   g_object_set_data (G_OBJECT (content_area), "round-dropdown", round_dropdown);
+  g_object_set_data (G_OBJECT (content_area), "format-dropdown", format_dropdown);
   g_object_set_data (G_OBJECT (content_area), "task-list", task_list);
 
   gtk_dialog_set_default_response (GTK_DIALOG (dialog), GTK_RESPONSE_OK);
   
   // For now, reuse the simple daily report generation logic when Generate is clicked
-  g_signal_connect (dialog, "response", G_CALLBACK (on_report_dialog_response), NULL);
+  g_signal_connect (dialog, "response", G_CALLBACK (on_report_dialog_response), app);
   gtk_widget_show (dialog);
 }
 

@@ -1017,6 +1017,10 @@ gtimer_window_init (GTimerWindow *self)
   gtk_actionable_set_action_name (GTK_ACTIONABLE (self->new_task_button), "win.new-task");
   adw_header_bar_pack_end (self->header_bar, self->new_task_button);
 
+  GtkWidget *report_button = gtk_button_new_from_icon_name ("x-office-document-symbolic");
+  gtk_actionable_set_action_name (GTK_ACTIONABLE (report_button), "app.report");
+  adw_header_bar_pack_end (self->header_bar, report_button);
+
   GMenu *menu = g_menu_new ();
   GMenu *task_section = g_menu_new ();
   g_menu_append (task_section, "Start Timing", "win.start-stop");

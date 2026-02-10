@@ -136,8 +136,8 @@ The current database schema uses an `entries` table with individual start/stop r
 - [x] **GT-10.8**: Paste Time (add buffer to task, buffer NOT cleared)
 - [x] **GT-10.9**: Clear Buffer
 
-### Epic 11: Reports 📋
-**Status**: Partial
+### Epic 11: Reports ✅
+**Status**: Complete
 **Description**: Report configuration, generation, and display
 
 - [x] **GT-11.1**: Report Configuration dialog (type, time range, format, rounding, task selection)
@@ -145,9 +145,9 @@ The current database schema uses an `entries` table with individual start/stop r
 - [x] **GT-11.3**: Report Display window (non-modal, scrolled text view)
 - [x] **GT-11.4**: Report search (Ctrl+F, find next)
 - [x] **GT-11.5**: Report save to file (GtkFileDialog)
-- [ ] **GT-11.6**: Report print (GtkPrintOperation)
+- [x] **GT-11.6**: Report print (GtkPrintOperation)
 - [x] **GT-11.7**: Time rounding (None, 1/5/10/15/30 min, 1 hour)
-- [ ] **GT-11.8**: Plain Text and HTML output formats
+- [x] **GT-11.8**: Plain Text and HTML output formats
 
 ### Epic 12: Preferences ✅
 **Status**: Complete
