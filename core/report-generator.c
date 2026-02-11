@@ -11,93 +11,87 @@ gtimer_report_generate (GTimerDBManager *db_manager,
                         GList *task_ids,
                         int rounding_minutes)
 {
-  (void)type;
-  (void)end_date;
   (void)task_ids;
   
+  sqlite3 *db = gtimer_db_manager_get_db (db_manager);
+  sqlite3_stmt *stmt;
+  GString *output = g_string_new (NULL);
+  
+  char *start_str = g_date_time_format (start_date, "%Y-%m-%d");
+  char *end_str = g_date_time_format (end_date, "%Y-%m-%d");
+
   if (format == GTIMER_REPORT_TEXT) {
-    GString *report = g_string_new ("GTimer Report\n");
-    char *date_str = g_date_time_format (start_date, "%Y-%m-%d");
-    g_string_append_printf (report, "Date: %s\n\n", date_str);
-    g_free (date_str);
+    g_string_append_printf (output, "GTimer Report\n");
+    g_string_append_printf (output, "Period: %s to %s\n\n", start_str, end_str);
+  } else {
+    g_string_append (output, "<!DOCTYPE html><html><head><style>");
+    g_string_append (output, "body { font-family: sans-serif; margin: 2em; }");
+    g_string_append (output, "table { border-collapse: collapse; width: 100%; }");
+    g_string_append (output, "th, td { border-bottom: 1px solid #ddd; padding: 8px; text-align: left; }");
+    g_string_append (output, "th { background-color: #f2f2f2; }");
+    g_string_append (output, ".duration { font-family: monospace; }");
+    g_string_append (output, "</style></head><body>");
+    g_string_append_printf (output, "<h1>GTimer Report</h1><h3>Period: %s to %s</h3>", start_str, end_str);
+    g_string_append (output, "<table><tr><th>Duration</th><th>Task</th></tr>");
+  }
 
-    int year = g_date_time_get_year (start_date);
-    int month = g_date_time_get_month (start_date);
-    int day = g_date_time_get_day_of_month (start_date);
+  const char *sql = 
+    "SELECT t.name, SUM(d.seconds) as total "
+    "FROM tasks t "
+    "JOIN daily_time d ON t.id = d.task_id "
+    "WHERE d.date >= ? AND d.date <= ? "
+    "GROUP BY t.id "
+    "ORDER BY total DESC;";
 
-    GList *rows = gtimer_db_manager_get_daily_report (db_manager, year, month, day);
-    if (rows) {
-      gint64 grand_total = 0;
-      for (GList *l = rows; l != NULL; l = l->next) {
-        GTimerReportRow *row = l->data;
-        gint64 seconds = row->total_duration;
-        
-        if (rounding_minutes > 0) {
-          gint64 round_secs = (gint64)rounding_minutes * 60;
-          seconds = ((seconds + round_secs / 2) / round_secs) * round_secs;
-        }
+  if (sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL) == SQLITE_OK) {
+    sqlite3_bind_text (stmt, 1, start_str, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text (stmt, 2, end_str, -1, SQLITE_TRANSIENT);
 
-        char *duration = gtimer_utils_format_duration (seconds);
-        g_string_append_printf (report, "%-10s  %s\n", duration, row->task_name);
-        grand_total += seconds;
-        g_free (duration);
+    gint64 grand_total = 0;
+    int count = 0;
+    while (sqlite3_step (stmt) == SQLITE_ROW) {
+      count++;
+      const char *name = (const char *)sqlite3_column_text (stmt, 0);
+      gint64 seconds = sqlite3_column_int64 (stmt, 1);
+
+      if (rounding_minutes > 0) {
+        gint64 round_secs = (gint64)rounding_minutes * 60;
+        seconds = ((seconds + round_secs / 2) / round_secs) * round_secs;
       }
-      char *total_str = gtimer_utils_format_duration (grand_total);
-      g_string_append_printf (report, "\n%-10s  Total\n", total_str);
-      g_free (total_str);
-      g_list_free_full (rows, (GDestroyNotify)gtimer_report_row_free);
-    } else {
-      g_string_append (report, "No data for this period.\n");
-    }
 
-    return g_string_free (report, FALSE);
+      char *duration = gtimer_utils_format_duration (seconds);
+      if (format == GTIMER_REPORT_TEXT) {
+        g_string_append_printf (output, "%-10s  %s\n", duration, name);
+      } else {
+        g_string_append_printf (output, "<tr><td class='duration'>%s</td><td>%s</td></tr>", duration, name);
+      }
+      grand_total += seconds;
+      g_free (duration);
+    }
+    
+    if (count > 0) {
+      char *total_str = gtimer_utils_format_duration (grand_total);
+      if (format == GTIMER_REPORT_TEXT) {
+        g_string_append_printf (output, "\n%-10s  Total\n", total_str);
+      } else {
+        g_string_append_printf (output, "<tr><th class='duration'>%s</th><th>Total</th></tr>", total_str);
+      }
+      g_free (total_str);
+    } else {
+      if (format == GTIMER_REPORT_TEXT) {
+        g_string_append (output, "No data found for this period.\n");
+      } else {
+        g_string_append (output, "<tr><td colspan='2'>No data found for this period.</td></tr>");
+      }
+    }
+    sqlite3_finalize (stmt);
   }
 
   if (format == GTIMER_REPORT_HTML) {
-    GString *report = g_string_new ("<!DOCTYPE html><html><head><style>");
-    g_string_append (report, "body { font-family: sans-serif; margin: 2em; }");
-    g_string_append (report, "table { border-collapse: collapse; width: 100%; }");
-    g_string_append (report, "th, td { border-bottom: 1px solid #ddd; padding: 8px; text-align: left; }");
-    g_string_append (report, "th { background-color: #f2f2f2; }");
-    g_string_append (report, ".duration { font-family: monospace; }");
-    g_string_append (report, "</style></head><body>");
-    
-    char *date_str = g_date_time_format (start_date, "%Y-%m-%d");
-    g_string_append_printf (report, "<h1>GTimer Report</h1><h3>Date: %s</h3>", date_str);
-    g_free (date_str);
-
-    g_string_append (report, "<table><tr><th>Duration</th><th>Task</th></tr>");
-
-    int year = g_date_time_get_year (start_date);
-    int month = g_date_time_get_month (start_date);
-    int day = g_date_time_get_day_of_month (start_date);
-
-    GList *rows = gtimer_db_manager_get_daily_report (db_manager, year, month, day);
-    if (rows) {
-      gint64 grand_total = 0;
-      for (GList *l = rows; l != NULL; l = l->next) {
-        GTimerReportRow *row = l->data;
-        gint64 seconds = row->total_duration;
-        if (rounding_minutes > 0) {
-          gint64 round_secs = (gint64)rounding_minutes * 60;
-          seconds = ((seconds + round_secs / 2) / round_secs) * round_secs;
-        }
-        char *duration = gtimer_utils_format_duration (seconds);
-        g_string_append_printf (report, "<tr><td class='duration'>%s</td><td>%s</td></tr>", duration, row->task_name);
-        grand_total += seconds;
-        g_free (duration);
-      }
-      char *total_str = gtimer_utils_format_duration (grand_total);
-      g_string_append_printf (report, "<tr><th class='duration'>%s</th><th>Total</th></tr>", total_str);
-      g_free (total_str);
-      g_list_free_full (rows, (GDestroyNotify)gtimer_report_row_free);
-    } else {
-      g_string_append (report, "<tr><td colspan='2'>No data for this period.</td></tr>");
-    }
-
-    g_string_append (report, "</table></body></html>");
-    return g_string_free (report, FALSE);
+    g_string_append (output, "</table></body></html>");
   }
 
-  return g_strdup ("Unknown report format.");
+  g_free (start_str);
+  g_free (end_str);
+  return g_string_free (output, FALSE);
 }

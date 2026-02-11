@@ -15,6 +15,36 @@ typedef struct {
 } GTimerApp;
 
 static void
+on_timer_tick (GTimerTimerService *service, gint64 elapsed, gpointer user_data)
+{
+  (void)elapsed;
+  GtkApplication *app = GTK_APPLICATION (user_data);
+  static gint64 last_notif_time = 0;
+  gint64 now = time (NULL);
+  
+  // Update notification if app is in background, throttle to once every 10s
+  if (!gtk_application_get_active_window (app)) {
+    if (now - last_notif_time >= 10) {
+      GTimerTask *task = gtimer_timer_service_get_active_task (service);
+      if (task) {
+        GNotification *notif = g_notification_new ("GTimer Running");
+        char *body = g_strdup_printf ("Timing: %s", gtimer_task_get_name (task));
+        g_notification_set_body (notif, body);
+        g_free (body);
+        g_notification_set_default_action (notif, "app.activate");
+        g_application_send_notification (G_APPLICATION (app), "timer-active", notif);
+        g_object_unref (notif);
+        last_notif_time = now;
+      }
+    }
+  } else {
+    // App is active, withdraw notification
+    g_application_withdraw_notification (G_APPLICATION (app), "timer-active");
+    last_notif_time = 0;
+  }
+}
+
+static void
 activate (GtkApplication *app,
           gpointer        user_data)
 {
@@ -40,6 +70,9 @@ activate (GtkApplication *app,
   
   gtimer_window_set_task_list_model (window, gtimer_app->task_list_model);
   gtimer_window_set_timer_service (window, gtimer_app->timer_service);
+
+  // Connect to tick for background notifications
+  g_signal_connect (gtimer_app->timer_service, "tick", G_CALLBACK (on_timer_tick), app);
 
   g_printerr ("DEBUG: activate: Refreshing model\n");
   gtimer_task_list_model_refresh (gtimer_app->task_list_model);
@@ -106,10 +139,41 @@ on_report_dialog_response (GtkDialog *dialog, int response_id, gpointer user_dat
     }
 
     GDateTime *now = g_date_time_new_now_local ();
+    GDateTime *start_date = g_date_time_ref (now);
+    GDateTime *end_date = g_date_time_ref (now);
+    
+    guint range_idx = gtk_drop_down_get_selected (g_object_get_data (G_OBJECT (content_area), "range-dropdown"));
+    
+    // Simplistic range calculation
+    switch (range_idx) {
+      case 0: // Today
+        break;
+      case 1: // This Week
+        start_date = g_date_time_add_days (now, -(int)g_date_time_get_day_of_week (now) + 1);
+        break;
+      case 2: // Last Week
+        {
+          GDateTime *last_week = g_date_time_add_days (now, -7);
+          start_date = g_date_time_add_days (last_week, -(int)g_date_time_get_day_of_week (last_week) + 1);
+          end_date = g_date_time_add_days (start_date, 6);
+          g_date_time_unref (last_week);
+        }
+        break;
+      case 5: // This Month
+        start_date = g_date_time_new_local (g_date_time_get_year (now), g_date_time_get_month (now), 1, 0, 0, 0);
+        break;
+      case 7: // This Year
+        start_date = g_date_time_new_local (g_date_time_get_year (now), 1, 1, 0, 0, 0);
+        break;
+      default:
+        // Handle other ranges if needed
+        break;
+    }
+
     char *report_text = gtimer_report_generate (gtimer_app->db_manager,
-                                                GTIMER_REPORT_DAILY,
+                                                GTIMER_REPORT_DAILY, // Not used in engine anymore
                                                 format,
-                                                now, now, NULL, rounding);
+                                                start_date, end_date, NULL, rounding);
     
     if (format == GTIMER_REPORT_HTML) {
       GtkFileChooserNative *native = gtk_file_chooser_native_new ("Save HTML Report",
@@ -137,6 +201,8 @@ on_report_dialog_response (GtkDialog *dialog, int response_id, gpointer user_dat
     
     g_free (report_text);
     g_date_time_unref (now);
+    g_date_time_unref (start_date);
+    g_date_time_unref (end_date);
   }
   gtk_window_destroy (GTK_WINDOW (dialog));
 }
@@ -338,22 +404,40 @@ on_preferences_action (GSimpleAction *action, GVariant *parameter, gpointer user
 }
 
 static void
+on_activate_action (GSimpleAction *action, GVariant *parameter, gpointer user_data)
+{
+  (void)action; (void)parameter;
+  GtkApplication *app = GTK_APPLICATION (user_data);
+  GtkWindow *window = gtk_application_get_active_window (app);
+  if (window) {
+    gtk_window_present (window);
+  }
+}
+
+static void
 on_about_action (GSimpleAction *action,
                  GVariant      *parameter,
                  gpointer       user_data)
 {
+  (void)action; (void)parameter;
   GtkApplication *app = GTK_APPLICATION (user_data);
   GtkWindow *parent = gtk_application_get_active_window (app);
-  (void)action;
-  (void)parameter;
 
   gtk_show_about_dialog (parent,
-                         "program-name", "gTimer",
-                          "logo-icon-name", "us.k5n.GTimer",
-                         "authors", (const char *[]) {"Craig Knudsen", NULL},
+                         "program-name", "GTimer",
+                         "logo-icon-name", "us.k5n.GTimer",
                          "version", VERSION,
+                         "copyright", "© 1998-2026 Craig Knudsen",
+                         "authors", (const char *[]) {"Craig Knudsen", NULL},
+                         "license-type", GTK_LICENSE_GPL_2_0,
                          "website", "http://www.k5n.us/gtimer.php",
-                         "copyright", "© 1998-2024 Craig Knudsen",
+                         "website-label", "Website: k5n.us/gtimer",
+                         "comments", "3.0.0 (2026-02-10)\n"
+                                     "• Complete rewrite with GTK 4 and Libadwaita\n"
+                                     "• Modernized UI with Search, Secondary Toolbar and Toast notifications\n"
+                                     "• Improved data integrity with Auto-save and Midnight Rollover\n"
+                                     "• Enhanced reporting with HTML support and search\n"
+                                     "• Robust idle detection for Wayland and X11",
                          NULL);
 }
 
@@ -412,6 +496,7 @@ main (int argc, char **argv)
     { .name = "save", .activate = on_save_action },
     { .name = "quit", .activate = on_quit_action },
     { .name = "preferences", .activate = on_preferences_action },
+    { .name = "activate", .activate = on_activate_action },
   };
   g_action_map_add_action_entries (G_ACTION_MAP (app), app_entries, G_N_ELEMENTS (app_entries), app);
   

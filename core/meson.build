@@ -11,7 +11,7 @@ core_sources = files(
 
 core_lib = static_library('gtimer-core',
   core_sources,
-  dependencies: [sqlite_dep, glib_dep],
+  dependencies: [sqlite_dep, glib_dep, x11_dep, xss_dep],
   include_directories: include_directories('.')
 )
 

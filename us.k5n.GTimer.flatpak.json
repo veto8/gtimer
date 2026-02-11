@@ -1,0 +1,38 @@
+{
+    "app-id": "us.k5n.GTimer",
+    "runtime": "org.gnome.Platform",
+    "runtime-version": "46",
+    "sdk": "org.gnome.Sdk",
+    "command": "gtimer",
+    "finish-args": [
+        "--share=network",
+        "--share=ipc",
+        "--socket=fallback-x11",
+        "--socket=wayland",
+        "--device=dri",
+        "--filesystem=xdg-run/dconf",
+        "--filesystem=~/.local/share/gtimer:create",
+        "--talk-name=org.gnome.Mutter.IdleMonitor",
+        "--talk-name=org.freedesktop.Notifications"
+    ],
+    "cleanup": [
+        "/include",
+        "/lib/pkgconfig",
+        "/share/pkgconfig",
+        "/share/aclocal",
+        "*.la",
+        "*.a"
+    ],
+    "modules": [
+        {
+            "name": "gtimer",
+            "buildsystem": "meson",
+            "sources": [
+                {
+                    "type": "dir",
+                    "path": "."
+                }
+            ]
+        }
+    ]
+}

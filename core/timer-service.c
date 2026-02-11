@@ -19,9 +19,60 @@ struct _GTimerTimerService
   GTimerIdleMonitor *idle_monitor;
   gint64 pause_start_time;
   gboolean is_paused;
+  guint auto_save_id;
+  gint64 idle_start_time;
 };
 
 G_DEFINE_TYPE (GTimerTimerService, gtimer_timer_service, G_TYPE_OBJECT)
+
+static void
+gtimer_timer_service_auto_save (GTimerTimerService *self)
+{
+  GSettings *settings = g_settings_new ("us.k5n.GTimer");
+  gboolean enabled = g_settings_get_boolean (settings, "auto-save");
+  g_object_unref (settings);
+
+  if (!enabled) return;
+
+  g_printerr ("DEBUG: Timer service auto-save starting\n");
+  
+  sqlite3 *db = gtimer_db_manager_get_db (self->db_manager);
+  sqlite3_stmt *stmt;
+  gint64 now = time (NULL);
+
+  // Find all timing tasks
+  const char *sql = "SELECT id, last_start_time FROM tasks WHERE is_timing = 1;";
+  if (sqlite3_prepare_v2 (db, sql, -1, &stmt, NULL) == SQLITE_OK) {
+    while (sqlite3_step (stmt) == SQLITE_ROW) {
+      int id = sqlite3_column_int (stmt, 0);
+      gint64 last_start = sqlite3_column_int64 (stmt, 1);
+      gint64 elapsed = now - last_start;
+
+      if (elapsed > 0) {
+        // Flush elapsed to daily_time
+        gtimer_db_manager_add_task_time (self->db_manager, id, elapsed);
+        // Update last_start_time to now so we don't double count
+        sqlite3_stmt *upd;
+        const char *upd_sql = "UPDATE tasks SET last_start_time = ? WHERE id = ?;";
+        if (sqlite3_prepare_v2 (db, upd_sql, -1, &upd, NULL) == SQLITE_OK) {
+          sqlite3_bind_int64 (upd, 1, now);
+          sqlite3_bind_int (upd, 2, id);
+          sqlite3_step (upd);
+          sqlite3_finalize (upd);
+        }
+      }
+    }
+    sqlite3_finalize (stmt);
+  }
+}
+
+static gboolean
+auto_save_timeout_cb (gpointer user_data)
+{
+  GTimerTimerService *self = GTIMER_TIMER_SERVICE (user_data);
+  gtimer_timer_service_auto_save (self);
+  return TRUE;
+}
 
 enum {
   SIGNAL_TICK,
@@ -37,6 +88,7 @@ gtimer_timer_service_finalize (GObject *object)
 {
   GTimerTimerService *self = GTIMER_TIMER_SERVICE (object);
   gtimer_timer_service_stop (self);
+  if (self->auto_save_id) g_source_remove (self->auto_save_id);
   g_clear_object (&self->idle_monitor);
   G_OBJECT_CLASS (gtimer_timer_service_parent_class)->finalize (object);
 }
@@ -72,6 +124,7 @@ gtimer_timer_service_class_init (GTimerTimerServiceClass *klass)
 static void
 gtimer_timer_service_init (GTimerTimerService *self)
 {
+  self->auto_save_id = g_timeout_add_seconds (60, auto_save_timeout_cb, self);
 }
 
 static void
@@ -79,6 +132,7 @@ on_idle_monitor_idle (GTimerIdleMonitor *monitor, gpointer user_data)
 {
   (void)monitor;
   GTimerTimerService *self = GTIMER_TIMER_SERVICE (user_data);
+  self->idle_start_time = time (NULL);
   gtimer_timer_service_pause (self);
 }
 
@@ -137,7 +191,7 @@ gtimer_timer_service_start (GTimerTimerService *self, GTimerTask *task)
   
   // Start idle monitoring if available
   if (self->idle_monitor && gtimer_idle_monitor_is_available (self->idle_monitor)) {
-    GSettings *settings = g_settings_new ("org.craigknudsen.GTimer");
+    GSettings *settings = g_settings_new ("us.k5n.GTimer");
     int threshold = g_settings_get_int (settings, "idle-threshold");
     gtimer_idle_monitor_start (self->idle_monitor, threshold * 60);
     g_object_unref (settings);
@@ -241,6 +295,22 @@ gboolean
 gtimer_timer_service_is_paused (GTimerTimerService *self)
 {
   return self->is_paused;
+}
+
+void
+gtimer_timer_service_remove_time (GTimerTimerService *self, GTimerTask *task, gint64 seconds)
+{
+  g_return_if_fail (GTIMER_IS_TIMER_SERVICE (self));
+  g_return_if_fail (GTIMER_IS_TASK (task));
+
+  gtimer_db_manager_add_task_time (self->db_manager, gtimer_task_get_id (task), -seconds);
+}
+
+gint64
+gtimer_timer_service_get_idle_duration (GTimerTimerService *self)
+{
+  if (self->idle_start_time == 0) return 0;
+  return time (NULL) - self->idle_start_time;
 }
 
 void

@@ -7,6 +7,7 @@ static int tick_count = 0;
 static void
 on_tick (GTimerTimerService *service, gint64 elapsed, gpointer user_data)
 {
+  (void)service; (void)elapsed;
   GMainLoop *loop = user_data;
   tick_count++;
   if (tick_count >= 2) {

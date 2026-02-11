@@ -350,11 +350,25 @@ gtimer_task_class_init (GTimerTaskClass *klass)
 
 static void
 
+
+
 gtimer_task_init (GTimerTask *self)
+
+
 
 {
 
+
+
+  (void)self;
+
+
+
 }
+
+
+
+
 
 
 

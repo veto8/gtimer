@@ -23,9 +23,11 @@ GList *gtimer_db_manager_get_projects (GTimerDBManager *self);
 
 // Task time management
 gint64 gtimer_db_manager_get_task_total_time (GTimerDBManager *self, int task_id);
-gint64 gtimer_db_manager_get_task_today_time (GTimerDBManager *self, int task_id);
-void gtimer_db_manager_add_task_time (GTimerDBManager *self, int task_id, gint64 seconds);
-void gtimer_db_manager_set_task_today_time (GTimerDBManager *self, int task_id, gint64 seconds);
+gint64      gtimer_db_manager_get_task_today_time (GTimerDBManager *self, int task_id);
+void        gtimer_db_manager_add_task_time    (GTimerDBManager *self, int task_id, gint64 seconds);
+void        gtimer_db_manager_add_task_time_for_date (GTimerDBManager *self, int task_id, const char *date_str, gint64 seconds);
+void        gtimer_db_manager_set_task_today_time (GTimerDBManager *self, int task_id, gint64 seconds);
+
 void gtimer_db_manager_start_task_timing (GTimerDBManager *self, int task_id);
 void gtimer_db_manager_stop_task_timing (GTimerDBManager *self, int task_id);
 gboolean gtimer_db_manager_is_task_timing (GTimerDBManager *self, int task_id);

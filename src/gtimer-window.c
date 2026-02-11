@@ -965,7 +965,6 @@ static void on_task_activated (GtkColumnView *column_view, guint position, gpoin
   GListModel *model = G_LIST_MODEL (selection);
   GTimerTask *task = GTIMER_TASK (g_list_model_get_item (model, position)); 
   int task_id = gtimer_task_get_id (task);
-  gboolean is_timing = gtimer_task_is_timing (task);
 
   // Stop all other tasks
   GListModel *base_model = gtimer_task_list_model_get_model (self->model);
@@ -1234,25 +1233,51 @@ gtimer_window_set_task_list_model (GTimerWindow *self, GTimerTaskListModel *mode
   g_signal_connect (selection_model, "selection-changed", G_CALLBACK (on_selection_changed), self);
   g_object_unref (selection_model);
   update_window_title (self);
+
+  // Resume on Startup
+  GSettings *settings = g_settings_new ("us.k5n.GTimer");
+  if (g_settings_get_boolean (settings, "resume-on-startup")) {
+    GListModel *base_model = gtimer_task_list_model_get_model (model);
+    guint n = g_list_model_get_n_items (base_model);
+    for (guint i = 0; i < n; i++) {
+      GTimerTask *task = GTIMER_TASK (g_list_model_get_item (base_model, i));
+      if (gtimer_task_is_timing (task)) {
+        // If it's already marked as timing in DB, we should start the service for it
+        gtimer_timer_service_start (self->timer_service, task);
+      }
+      g_object_unref (task);
+    }
+  }
+  g_object_unref (settings);
 }
 
 static void
 on_idle_response (GtkDialog *dialog, int response_id, gpointer user_data)
 {
   GTimerWindow *self = GTIMER_WINDOW (user_data);
-  // choice: 1=Revert, 2=Continue, 3=Resume (suggested)
+  GTimerTask *active = gtimer_timer_service_get_active_task (self->timer_service);
+  gint64 idle_secs = gtimer_timer_service_get_idle_duration (self->timer_service);
   
   if (response_id == 1) { // Revert
-    // Remove idle time, stop timing
-    // We'll need more logic here to handle "remove idle time"
-    // For now, just stop all timers as a basic implementation
-    g_action_group_activate_action (G_ACTION_GROUP (self), "stop-all", NULL);
+    // Discard idle time and stop
+    if (active) {
+      gtimer_timer_service_remove_time (self->timer_service, active, idle_secs);
+      gtimer_timer_service_stop (self->timer_service);
+    }
   } else if (response_id == 3) { // Resume
-    // Remove idle time, keep timing
-    // TODO: implement time removal
+    // Discard idle time but keep timing (resume now)
+    if (active) {
+      gtimer_timer_service_remove_time (self->timer_service, active, idle_secs);
+      gtimer_timer_service_resume (self->timer_service);
+    }
   }
-  // Continue (response_id == 2) does nothing (keep time)
+  // Continue (response_id == 2) - just keep timing as is (was already paused, resume it)
+  else if (response_id == 2) {
+    gtimer_timer_service_resume (self->timer_service);
+  }
   
+  gtimer_task_list_model_refresh (self->model);
+  update_window_title (self);
   gtk_window_destroy (GTK_WINDOW (dialog));
 }
 

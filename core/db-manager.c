@@ -330,11 +330,9 @@ gtimer_db_manager_get_task_today_time (GTimerDBManager *self, int task_id)
 }
 
 void
-gtimer_db_manager_add_task_time (GTimerDBManager *self, int task_id, gint64 seconds)
+gtimer_db_manager_add_task_time_for_date (GTimerDBManager *self, int task_id, const char *date_str, gint64 seconds)
 {
   sqlite3_stmt *stmt;
-  char *date_str = get_today_date_string ();
-  
   const char *sql = 
     "INSERT INTO daily_time (task_id, date, seconds) VALUES (?, ?, ?) "
     "ON CONFLICT(task_id, date) DO UPDATE SET seconds = seconds + excluded.seconds;";
@@ -346,6 +344,13 @@ gtimer_db_manager_add_task_time (GTimerDBManager *self, int task_id, gint64 seco
     sqlite3_step (stmt);
     sqlite3_finalize (stmt);
   }
+}
+
+void
+gtimer_db_manager_add_task_time (GTimerDBManager *self, int task_id, gint64 seconds)
+{
+  char *date_str = get_today_date_string ();
+  gtimer_db_manager_add_task_time_for_date (self, task_id, date_str, seconds);
   g_free (date_str);
 }
 
@@ -386,20 +391,55 @@ void
 gtimer_db_manager_stop_task_timing (GTimerDBManager *self, int task_id)
 {
   sqlite3_stmt *stmt;
-  gint64 elapsed = 0;
+  gint64 last_start = 0;
 
-  // Calculate elapsed time
-  const char *query_sql = "SELECT strftime('%s', 'now') - last_start_time FROM tasks WHERE id = ? AND is_timing = 1;";
+  // Get last start time
+  const char *query_sql = "SELECT last_start_time FROM tasks WHERE id = ? AND is_timing = 1;";
   if (sqlite3_prepare_v2 (self->db, query_sql, -1, &stmt, NULL) == SQLITE_OK) {
     sqlite3_bind_int (stmt, 1, task_id);
     if (sqlite3_step (stmt) == SQLITE_ROW) {
-      elapsed = sqlite3_column_int64 (stmt, 0);
+      last_start = sqlite3_column_int64 (stmt, 0);
     }
     sqlite3_finalize (stmt);
   }
 
-  if (elapsed > 0) {
-    gtimer_db_manager_add_task_time (self, task_id, elapsed);
+  if (last_start > 0) {
+    gint64 now = time (NULL);
+    
+    // Check if we crossed midnight
+    struct tm start_tm = *localtime ((time_t *)&last_start);
+    struct tm now_tm = *localtime ((time_t *)&now);
+    
+    if (start_tm.tm_mday == now_tm.tm_mday &&
+        start_tm.tm_mon == now_tm.tm_mon &&
+        start_tm.tm_year == now_tm.tm_year) {
+      // Same day
+      gtimer_db_manager_add_task_time (self, task_id, now - last_start);
+    } else {
+      // Different days - need to split
+      gint64 current = last_start;
+      while (TRUE) {
+        struct tm cur_tm = *localtime ((time_t *)&current);
+        char date_str[11];
+        strftime (date_str, sizeof (date_str), "%Y-%m-%d", &cur_tm);
+        
+        // Calculate end of THIS day
+        cur_tm.tm_hour = 23;
+        cur_tm.tm_min = 59;
+        cur_tm.tm_sec = 59;
+        gint64 end_of_day = mktime (&cur_tm);
+        
+        if (end_of_day >= now) {
+          // Final day
+          gtimer_db_manager_add_task_time_for_date (self, task_id, date_str, now - current);
+          break;
+        } else {
+          // Full or partial day until midnight
+          gtimer_db_manager_add_task_time_for_date (self, task_id, date_str, end_of_day - current + 1);
+          current = end_of_day + 1; // Start of next day
+        }
+      }
+    }
   }
 
   const char *update_sql = "UPDATE tasks SET is_timing = 0 WHERE id = ?;";
