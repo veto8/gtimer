@@ -82,8 +82,8 @@ The current database schema uses an `entries` table with individual start/stop r
 **Description**: Mouse and keyboard task operations
 
 - [x] **GT-6.1**: Single click to select
-- [x] **GT-6.2**: Double-click to toggle timing (does NOT stop other tasks)
-- [x] **GT-6.3**: Multiple simultaneous running tasks
+- [x] **GT-6.2**: Double-click to toggle timing (stops all other tasks)
+- [x] **GT-6.3**: Multiple simultaneous running tasks (via buttons/menu)
 - [x] **GT-6.4**: Right-click context menu (GtkPopoverMenu, same actions as Task section of hamburger menu)
 
 ### Epic 7: Keyboard Shortcuts ✅

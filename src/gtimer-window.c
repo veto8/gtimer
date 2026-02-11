@@ -24,6 +24,8 @@ struct _GTimerWindow
   GtkWidget *new_task_button;
   GtkWidget *edit_task_button;
   GtkWidget *annotate_button;
+  GtkSearchEntry *search_entry;
+  GtkStringFilter *string_filter;
 
   gint64 time_buffer;
   guint tick_timeout_id;
@@ -962,6 +964,20 @@ static void on_task_activated (GtkColumnView *column_view, guint position, gpoin
   GtkSelectionModel *selection = gtk_column_view_get_model (column_view);
   GListModel *model = G_LIST_MODEL (selection);
   GTimerTask *task = GTIMER_TASK (g_list_model_get_item (model, position)); 
+  int task_id = gtimer_task_get_id (task);
+  gboolean is_timing = gtimer_task_is_timing (task);
+
+  // Stop all other tasks
+  GListModel *base_model = gtimer_task_list_model_get_model (self->model);
+  guint n_items = g_list_model_get_n_items (base_model);
+  for (guint i = 0; i < n_items; i++) {
+    GTimerTask *t = GTIMER_TASK (g_list_model_get_item (base_model, i));
+    if (gtimer_task_get_id (t) != task_id && gtimer_task_is_timing (t)) {
+      gtimer_db_manager_stop_task_timing (self->db_manager, gtimer_task_get_id (t));
+    }
+    g_object_unref (t);
+  }
+
   toggle_task_timer (self, task); 
   g_object_unref (task); 
 }
@@ -1001,34 +1017,70 @@ gtimer_window_init (GTimerWindow *self)
   self->window_title = ADW_WINDOW_TITLE (adw_window_title_new ("GTimer", ""));
   adw_header_bar_set_title_widget (self->header_bar, GTK_WIDGET (self->window_title));
 
-  self->start_stop_button = gtk_button_new_from_icon_name ("media-playback-start-symbolic");
-  gtk_actionable_set_action_name (GTK_ACTIONABLE (self->start_stop_button), "win.start-stop");
-  adw_header_bar_pack_start (self->header_bar, self->start_stop_button);
-  self->stop_all_button = gtk_button_new_from_icon_name ("media-playback-stop-symbolic");
-  gtk_actionable_set_action_name (GTK_ACTIONABLE (self->stop_all_button), "win.stop-all");
-  adw_header_bar_pack_start (self->header_bar, self->stop_all_button);
-  self->annotate_button = gtk_button_new_from_icon_name ("edit-paste-symbolic");
-  gtk_actionable_set_action_name (GTK_ACTIONABLE (self->annotate_button), "win.annotate");
-  adw_header_bar_pack_end (self->header_bar, self->annotate_button);
-  self->edit_task_button = gtk_button_new_from_icon_name ("document-edit-symbolic");
-  gtk_actionable_set_action_name (GTK_ACTIONABLE (self->edit_task_button), "win.edit-task");
-  adw_header_bar_pack_end (self->header_bar, self->edit_task_button);
+  // Secondary Toolbar (Action Bar) below title bar
+  GtkWidget *action_bar = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+  gtk_widget_add_css_class (action_bar, "toolbar");
+  gtk_widget_set_margin_start (action_bar, 6);
+  gtk_widget_set_margin_end (action_bar, 6);
+  gtk_widget_set_margin_top (action_bar, 3);
+  gtk_widget_set_margin_bottom (action_bar, 3);
+  gtk_box_append (GTK_BOX (main_box), action_bar);
+
+  struct { const char *icon; const char *action; const char *tooltip; } bar_buttons[] = {
+    { "media-playback-start-symbolic", "win.start-stop", "Start/Stop Timing" },
+    { "media-playback-stop-symbolic", "win.stop-all", "Stop All Timers" },
+    { "list-add-symbolic", "win.new-task", "New Task" },
+    { "document-edit-symbolic", "win.edit-task", "Edit Task" },
+    { "edit-paste-symbolic", "win.annotate", "Annotate Task" },
+    { "x-office-document-symbolic", "app.report", "Daily Report" },
+  };
+
+  for (guint i = 0; i < G_N_ELEMENTS (bar_buttons); i++) {
+    GtkWidget *btn = gtk_button_new_from_icon_name (bar_buttons[i].icon);
+    gtk_actionable_set_action_name (GTK_ACTIONABLE (btn), bar_buttons[i].action);
+    gtk_widget_set_tooltip_text (btn, bar_buttons[i].tooltip);
+    gtk_box_append (GTK_BOX (action_bar), btn);
+    
+    // Track some buttons to update sensitivity/icons
+    if (g_strcmp0 (bar_buttons[i].action, "win.start-stop") == 0) self->start_stop_button = btn;
+    if (g_strcmp0 (bar_buttons[i].action, "win.stop-all") == 0) self->stop_all_button = btn;
+    if (g_strcmp0 (bar_buttons[i].action, "win.edit-task") == 0) self->edit_task_button = btn;
+    if (g_strcmp0 (bar_buttons[i].action, "win.annotate") == 0) self->annotate_button = btn;
+  }
+
+  // Header Bar primary buttons
+  GtkWidget *header_start_stop = gtk_button_new_from_icon_name ("media-playback-start-symbolic");
+  gtk_actionable_set_action_name (GTK_ACTIONABLE (header_start_stop), "win.start-stop");
+  gtk_widget_set_tooltip_text (header_start_stop, "Start/Stop Timing");
+  adw_header_bar_pack_start (self->header_bar, header_start_stop);
+
+  // Search Entry in center
+  self->search_entry = GTK_SEARCH_ENTRY (gtk_search_entry_new ());
+  gtk_widget_set_hexpand (GTK_WIDGET (self->search_entry), TRUE);
+  gtk_widget_set_halign (GTK_WIDGET (self->search_entry), GTK_ALIGN_CENTER);
+  gtk_widget_set_size_request (GTK_WIDGET (self->search_entry), 250, -1);
+  adw_header_bar_set_title_widget (self->header_bar, GTK_WIDGET (self->search_entry));
+
   self->new_task_button = gtk_button_new_from_icon_name ("list-add-symbolic");
   gtk_actionable_set_action_name (GTK_ACTIONABLE (self->new_task_button), "win.new-task");
+  gtk_widget_set_tooltip_text (self->new_task_button, "New Task");
   adw_header_bar_pack_end (self->header_bar, self->new_task_button);
-
-  GtkWidget *report_button = gtk_button_new_from_icon_name ("x-office-document-symbolic");
-  gtk_actionable_set_action_name (GTK_ACTIONABLE (report_button), "app.report");
-  adw_header_bar_pack_end (self->header_bar, report_button);
 
   GMenu *menu = g_menu_new ();
   GMenu *task_section = g_menu_new ();
   g_menu_append (task_section, "Start Timing", "win.start-stop");
   g_menu_append (task_section, "Stop All Timing", "win.stop-all");
+  g_menu_append (task_section, "Edit Task...", "win.edit-task");
+  g_menu_append (task_section, "Annotate...", "win.annotate");
   g_menu_append (task_section, "Hide", "win.hide-task");
   g_menu_append (task_section, "Unhide...", "win.unhide-tasks");
   g_menu_append (task_section, "Delete", "win.delete-task");
   g_menu_append_section (menu, "Task", G_MENU_MODEL (task_section));
+  
+  GMenu *report_section = g_menu_new ();
+  g_menu_append (report_section, "Daily Report...", "app.report");
+  g_menu_append_section (menu, "Data", G_MENU_MODEL (report_section));
+
   GMenu *time_section = g_menu_new ();
   g_menu_append (time_section, "+1 Minute", "win.adjust-time(60)");
   g_menu_append (time_section, "+5 Minutes", "win.adjust-time(300)");
@@ -1049,13 +1101,12 @@ gtimer_window_init (GTimerWindow *self)
   g_menu_append (project_section, "Edit Project...", "win.edit-project");
   g_menu_append_section (menu, "Project", G_MENU_MODEL (project_section));
   GMenu *app_section = g_menu_new ();
-  g_menu_append (app_section, "Daily Report", "app.report");
   g_menu_append (app_section, "Keyboard Shortcuts", "win.shortcuts");
   g_menu_append (app_section, "About GTimer", "app.about");
   g_menu_append_section (menu, NULL, G_MENU_MODEL (app_section));
   
   GtkMenuButton *menu_button = GTK_MENU_BUTTON (gtk_menu_button_new ());
-  gtk_menu_button_set_icon_name (menu_button, "open-menu-symbolic");
+  gtk_menu_button_set_icon_name (menu_button, "view-more-symbolic");
   gtk_menu_button_set_menu_model (menu_button, G_MENU_MODEL (menu));
   adw_header_bar_pack_end (self->header_bar, GTK_WIDGET (menu_button));
 
@@ -1158,7 +1209,25 @@ void
 gtimer_window_set_task_list_model (GTimerWindow *self, GTimerTaskListModel *model)
 {
   self->model = model;
-  GtkSortListModel *sort_model = gtk_sort_list_model_new (gtimer_task_list_model_get_model (model),
+  
+  // Create Multi-Filter for Name OR Project Name
+  GtkAnyFilter *any_filter = gtk_any_filter_new ();
+  
+  GtkExpression *name_expr = gtk_property_expression_new (GTIMER_TYPE_TASK, NULL, "name");
+  GtkStringFilter *name_filter = gtk_string_filter_new (name_expr);
+  gtk_multi_filter_append (GTK_MULTI_FILTER (any_filter), GTK_FILTER (name_filter));
+  
+  GtkExpression *proj_expr = gtk_property_expression_new (GTIMER_TYPE_TASK, NULL, "project-name");
+  GtkStringFilter *proj_filter = gtk_string_filter_new (proj_expr);
+  gtk_multi_filter_append (GTK_MULTI_FILTER (any_filter), GTK_FILTER (proj_filter));
+
+  // Connect search entry to filter strings
+  g_object_bind_property (self->search_entry, "text", name_filter, "search", G_BINDING_SYNC_CREATE);
+  g_object_bind_property (self->search_entry, "text", proj_filter, "search", G_BINDING_SYNC_CREATE);
+
+  GtkFilterListModel *filter_model = gtk_filter_list_model_new (gtimer_task_list_model_get_model (model), GTK_FILTER (any_filter));
+  
+  GtkSortListModel *sort_model = gtk_sort_list_model_new (G_LIST_MODEL (filter_model),
                                                          g_object_ref (gtk_column_view_get_sorter (self->column_view)));
   GtkSelectionModel *selection_model = GTK_SELECTION_MODEL (gtk_single_selection_new (G_LIST_MODEL (sort_model)));
   gtk_column_view_set_model (self->column_view, selection_model);
