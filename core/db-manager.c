@@ -43,12 +43,10 @@ gtimer_db_manager_new (const char *path, GError **error)
     sqlite3_free (errmsg);
   }
 
-  g_printerr ("DEBUG: gtimer_db_manager_new: Initializing schema\n");
   rc = sqlite3_exec (self->db, schema_sql, NULL, NULL, &errmsg);
   if (rc != SQLITE_OK) {
     g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
                  "Failed to initialize schema: %s", errmsg);
-    g_printerr ("DEBUG: Failed to initialize schema: %s\n", errmsg);
     sqlite3_free (errmsg);
     sqlite3_close (self->db);
     g_free (self);
@@ -56,29 +54,19 @@ gtimer_db_manager_new (const char *path, GError **error)
   }
 
   // Ensure tasks table has all required columns (migration)
-  g_printerr ("DEBUG: gtimer_db_manager_new: Running migrations if needed\n");
   rc = sqlite3_exec (self->db, "ALTER TABLE tasks ADD COLUMN is_hidden INTEGER DEFAULT 0;", NULL, NULL, &errmsg);
-  if (rc != SQLITE_OK) {
-    g_printerr ("DEBUG: Migration is_hidden result: %s\n", errmsg);
+  if (rc == SQLITE_OK) {
     sqlite3_free (errmsg);
-  } else {
-    g_printerr ("DEBUG: Migration is_hidden: Added column\n");
   }
   
   rc = sqlite3_exec (self->db, "ALTER TABLE tasks ADD COLUMN is_timing INTEGER DEFAULT 0;", NULL, NULL, &errmsg);
-  if (rc != SQLITE_OK) {
-    g_printerr ("DEBUG: Migration is_timing result: %s\n", errmsg);
+  if (rc == SQLITE_OK) {
     sqlite3_free (errmsg);
-  } else {
-    g_printerr ("DEBUG: Migration is_timing: Added column\n");
   }
 
   rc = sqlite3_exec (self->db, "ALTER TABLE tasks ADD COLUMN last_start_time INTEGER;", NULL, NULL, &errmsg);
-  if (rc != SQLITE_OK) {
-    g_printerr ("DEBUG: Migration last_start_time result: %s\n", errmsg);
+  if (rc == SQLITE_OK) {
     sqlite3_free (errmsg);
-  } else {
-    g_printerr ("DEBUG: Migration last_start_time: Added column\n");
   }
 
   return self;
@@ -105,11 +93,8 @@ gtimer_db_manager_create_task (GTimerDBManager *self, const char *name, int proj
   sqlite3_stmt *stmt;
   int rc;
 
-  g_printerr ("DEBUG: Creating task: '%s' (project_id: %d)\n", name, project_id);
-
   rc = sqlite3_prepare_v2 (self->db, "INSERT INTO tasks (name, project_id) VALUES (?, ?);", -1, &stmt, NULL);
   if (rc != SQLITE_OK) {
-    g_printerr ("DEBUG: Failed to prepare task insert: %s\n", sqlite3_errmsg (self->db));
     return;
   }
 
@@ -119,12 +104,7 @@ gtimer_db_manager_create_task (GTimerDBManager *self, const char *name, int proj
   else
     sqlite3_bind_null (stmt, 2);
 
-  rc = sqlite3_step (stmt);
-  if (rc != SQLITE_DONE) {
-    g_printerr ("DEBUG: Failed to execute task insert: %s\n", sqlite3_errmsg (self->db));
-  } else {
-    g_printerr ("DEBUG: Task inserted successfully.\n");
-  }
+  sqlite3_step (stmt);
   sqlite3_finalize (stmt);
 }
 

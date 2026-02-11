@@ -2,7 +2,7 @@
 
 > This file tracks the current status of GTimer development. It is the source of truth for project progress.
 >
-> Last updated: 2026-02-10
+> Last updated: 2026-02-11
 
 ## Project Overview
 
@@ -96,6 +96,27 @@ All tests passing:
 - ✅ test-service
 - ✅ test-idle-init
 
+## Pre-Release Tasks 🚧
+
+Before publishing to Flathub or distributions, the following issues must be resolved:
+
+### Critical Issues
+- [x] **Fix AppStream launchable ID** - `data/us.k5n.GTimer.metainfo.xml` has wrong desktop ID (`org.craigknudsen.GTimer.desktop` should be `us.k5n.GTimer.desktop`)
+- [x] **Complete i18n setup** - Added `i18n.gettext()` to po/meson.build and created LINGUAS file for supported languages (cs, cz, es, fr, sv)
+
+### Important Issues
+- [ ] **Add AppStream screenshots** - Required for Flathub; currently has placeholder comment
+- [x] **Remove debug output** - Removed 19 `g_printerr("DEBUG: ...")` statements from main.c, gtimer-window.c, db-manager.c, and timer-service.c
+- [x] **Validate metadata** - Ran validators: AppStream shows only missing screenshots (tracked separately), desktop file shows minor category hint (not an error)
+
+### Validation Checklist
+- [~] Test Flatpak build locally - flatpak-builder not installed, but manifest validates
+- [x] Generate .pot file for translators - Successfully created po/gtimer.pot with UTF-8 support
+- [x] Verify Ubuntu 22.04 compatibility (Libadwaita 1.1.7 minimum) - Tested: GTK 4.6.9, Libadwaita 1.1.7, all tests pass
+- [x] Verify Ubuntu 24.04 compatibility (Libadwaita 1.5.0+) - Verified: Ubuntu 24.04 ships Libadwaita 1.5.0+
+
 ## Current State
 
 The project has achieved all primary objectives defined in the PRD and UI specification. The application is a modern, stable, and feature-complete successor to the legacy GTimer.
+
+**Phase**: Feature Complete → Pre-Release Polish

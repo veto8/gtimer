@@ -1,0 +1,4 @@
+src/main.c
+src/gtimer-window.c
+src/report-window.c
+core/report-generator.c

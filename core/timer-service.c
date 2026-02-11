@@ -34,8 +34,6 @@ gtimer_timer_service_auto_save (GTimerTimerService *self)
 
   if (!enabled) return;
 
-  g_printerr ("DEBUG: Timer service auto-save starting\n");
-  
   sqlite3 *db = gtimer_db_manager_get_db (self->db_manager);
   sqlite3_stmt *stmt;
   gint64 now = time (NULL);

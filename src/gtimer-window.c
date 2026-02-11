@@ -137,7 +137,6 @@ static void
 on_add_task_response (GtkDialog *dialog, int response_id, gpointer user_data)
 {
   GTimerWindow *self = GTIMER_WINDOW (user_data);
-  g_printerr ("DEBUG: on_add_task_response response_id=%d\n", response_id);
   if (response_id == GTK_RESPONSE_OK) {
     GtkWidget *content_area = gtk_dialog_get_content_area (GTK_DIALOG (dialog));
     GtkWidget *entry = g_object_get_data (G_OBJECT (content_area), "entry");
@@ -158,15 +157,12 @@ on_add_task_response (GtkDialog *dialog, int response_id, gpointer user_data)
       g_object_unref (item);
     }
 
-    g_printerr ("DEBUG: on_add_task_response name='%s'\n", name ? name : "NULL");
     if (name && strlen (name) > 0) {
       gtimer_db_manager_create_task (self->db_manager, name, project_id);
       show_toast (self, "Task '%s' added", name);
       if (self->model) {
         gtimer_task_list_model_refresh (self->model);
         update_window_title (self);
-      } else {
-        g_printerr ("DEBUG: on_add_task_response model is NULL!\n");
       }
     }
   }
@@ -439,7 +435,6 @@ on_adjust_time_action (GSimpleAction *action, GVariant *parameter, gpointer user
   GObject *item = gtk_single_selection_get_selected_item (GTK_SINGLE_SELECTION (selection));
   if (GTIMER_IS_TASK (item)) {
     gtimer_db_manager_add_task_time (self->db_manager, gtimer_task_get_id (GTIMER_TASK (item)), seconds);
-    show_toast (self, "Time adjusted");
     gtimer_task_list_model_refresh (self->model);
     update_window_title (self);
   }
@@ -1127,7 +1122,7 @@ gtimer_window_init (GTimerWindow *self)
   g_signal_connect (factory, "setup", G_CALLBACK (setup_project_cb), NULL);
   g_signal_connect (factory, "bind", G_CALLBACK (bind_project_cb), NULL);
   GtkColumnViewColumn *col = gtk_column_view_column_new ("Project", factory);
-  gtk_column_view_column_set_fixed_width (col, 150);
+  gtk_column_view_column_set_fixed_width (col, 180);
   gtk_column_view_column_set_resizable (col, TRUE);
   GtkExpression *prop_expr = gtk_property_expression_new (GTIMER_TYPE_TASK, NULL, "project-name");
   GtkStringSorter *string_sorter = gtk_string_sorter_new (prop_expr);
@@ -1149,7 +1144,7 @@ gtimer_window_init (GTimerWindow *self)
   g_signal_connect (factory, "setup", G_CALLBACK (setup_time_label_cb), NULL);
   g_signal_connect (factory, "bind", G_CALLBACK (bind_today_time_cb), NULL);
   col = gtk_column_view_column_new ("Today", factory);
-  gtk_column_view_column_set_fixed_width (col, 100);
+  gtk_column_view_column_set_fixed_width (col, 110);
   gtk_column_view_column_set_resizable (col, TRUE);
   prop_expr = gtk_property_expression_new (GTIMER_TYPE_TASK, NULL, "today-time");
   GtkNumericSorter *num_sorter = gtk_numeric_sorter_new (prop_expr);
@@ -1160,7 +1155,7 @@ gtimer_window_init (GTimerWindow *self)
   g_signal_connect (factory, "setup", G_CALLBACK (setup_time_label_cb), NULL);
   g_signal_connect (factory, "bind", G_CALLBACK (bind_total_time_cb), NULL);
   col = gtk_column_view_column_new ("Total", factory);
-  gtk_column_view_column_set_fixed_width (col, 100);
+  gtk_column_view_column_set_fixed_width (col, 110);
   gtk_column_view_column_set_resizable (col, TRUE);
   prop_expr = gtk_property_expression_new (GTIMER_TYPE_TASK, NULL, "total-time");
   num_sorter = gtk_numeric_sorter_new (prop_expr);
@@ -1173,7 +1168,7 @@ gtimer_window_init (GTimerWindow *self)
   g_signal_connect (factory, "setup", G_CALLBACK (setup_date_label_cb), NULL);
   g_signal_connect (factory, "bind", G_CALLBACK (bind_created_at_cb), NULL);
   col = gtk_column_view_column_new ("Created", factory);
-  gtk_column_view_column_set_fixed_width (col, 100);
+  gtk_column_view_column_set_fixed_width (col, 130);
   gtk_column_view_column_set_resizable (col, TRUE);
   prop_expr = gtk_property_expression_new (GTIMER_TYPE_TASK, NULL, "created-at");
   num_sorter = gtk_numeric_sorter_new (prop_expr);

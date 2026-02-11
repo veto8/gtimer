@@ -6,6 +6,8 @@
 #include "../core/idle-monitor.h"
 #include "../core/timer-utils.h"
 #include "../core/report-generator.h"
+#include <glib/gi18n.h>
+#include <locale.h>
 
 typedef struct {
   GTimerDBManager *db_manager;
@@ -27,8 +29,8 @@ on_timer_tick (GTimerTimerService *service, gint64 elapsed, gpointer user_data)
     if (now - last_notif_time >= 10) {
       GTimerTask *task = gtimer_timer_service_get_active_task (service);
       if (task) {
-        GNotification *notif = g_notification_new ("GTimer Running");
-        char *body = g_strdup_printf ("Timing: %s", gtimer_task_get_name (task));
+        GNotification *notif = g_notification_new (_("GTimer Running"));
+        char *body = g_strdup_printf (_("Timing: %s"), gtimer_task_get_name (task));
         g_notification_set_body (notif, body);
         g_free (body);
         g_notification_set_default_action (notif, "app.activate");
@@ -74,7 +76,6 @@ activate (GtkApplication *app,
   // Connect to tick for background notifications
   g_signal_connect (gtimer_app->timer_service, "tick", G_CALLBACK (on_timer_tick), app);
 
-  g_printerr ("DEBUG: activate: Refreshing model\n");
   gtimer_task_list_model_refresh (gtimer_app->task_list_model);
 
   gtk_window_present (GTK_WINDOW (window));
@@ -176,11 +177,11 @@ on_report_dialog_response (GtkDialog *dialog, int response_id, gpointer user_dat
                                                 start_date, end_date, NULL, rounding);
     
     if (format == GTIMER_REPORT_HTML) {
-      GtkFileChooserNative *native = gtk_file_chooser_native_new ("Save HTML Report",
+      GtkFileChooserNative *native = gtk_file_chooser_native_new (_("Save HTML Report"),
                                                                   parent,
                                                                   GTK_FILE_CHOOSER_ACTION_SAVE,
-                                                                  "_Save",
-                                                                  "_Cancel");
+                                                                  _("_Save"),
+                                                                  _("_Cancel"));
       
       char *date_slug = g_date_time_format (now, "%Y%m%d");
       char *default_filename = g_strdup_printf ("gtimer-report-%s.html", date_slug);
@@ -195,7 +196,7 @@ on_report_dialog_response (GtkDialog *dialog, int response_id, gpointer user_dat
       g_signal_connect (native, "response", G_CALLBACK (on_html_save_response), g_strdup (report_text));
       gtk_native_dialog_show (GTK_NATIVE_DIALOG (native));
     } else {
-      GTimerReportWindow *report_window = gtimer_report_window_new (parent, "Report", report_text);
+      GTimerReportWindow *report_window = gtimer_report_window_new (parent, _("Report"), report_text);
       gtk_window_present (GTK_WINDOW (report_window));
     }
     
@@ -218,11 +219,11 @@ on_report_action (GSimpleAction *action,
   GtkWindow *parent = gtk_application_get_active_window (app);
   GTimerApp *gtimer_app = g_object_get_data (G_OBJECT (app), "gtimer-app");
   
-  GtkWidget *dialog = gtk_dialog_new_with_buttons ("Generate Report",
+  GtkWidget *dialog = gtk_dialog_new_with_buttons (_("Generate Report"),
                                                    parent,
                                                    GTK_DIALOG_MODAL | GTK_DIALOG_USE_HEADER_BAR,
-                                                   "_Cancel", GTK_RESPONSE_CANCEL,
-                                                   "_Generate", GTK_RESPONSE_OK,
+                                                   _("_Cancel"), GTK_RESPONSE_CANCEL,
+                                                   _("_Generate"), GTK_RESPONSE_OK,
                                                    NULL);
   
   GtkWidget *content_area = gtk_dialog_get_content_area (GTK_DIALOG (dialog));
@@ -234,18 +235,18 @@ on_report_action (GSimpleAction *action,
 
   // Report Type
   GtkWidget *type_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
-  gtk_box_append (GTK_BOX (type_box), gtk_label_new ("Report Type:"));
-  GtkStringList *type_list = gtk_string_list_new ((const char *[]) {"Daily", "Weekly", "Monthly", "Yearly", NULL});
+  gtk_box_append (GTK_BOX (type_box), gtk_label_new (_("Report Type:")));
+  GtkStringList *type_list = gtk_string_list_new ((const char *[]) {_("Daily"), _("Weekly"), _("Monthly"), _("Yearly"), NULL});
   GtkDropDown *type_dropdown = GTK_DROP_DOWN (gtk_drop_down_new (G_LIST_MODEL (type_list), NULL));
   gtk_box_append (GTK_BOX (type_box), GTK_WIDGET (type_dropdown));
   gtk_box_append (GTK_BOX (content_area), type_box);
 
   // Time Range
   GtkWidget *range_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
-  gtk_box_append (GTK_BOX (range_box), gtk_label_new ("Time Range:"));
+  gtk_box_append (GTK_BOX (range_box), gtk_label_new (_("Time Range:")));
   GtkStringList *range_list = gtk_string_list_new ((const char *[]) {
-    "Today", "This Week", "Last Week", "This & Last Week", "Last Two Weeks", 
-    "This Month", "Last Month", "This Year", "Last Year", NULL
+    _("Today"), _("This Week"), _("Last Week"), _("This & Last Week"), _("Last Two Weeks"), 
+    _("This Month"), _("Last Month"), _("This Year"), _("Last Year"), NULL
   });
   GtkDropDown *range_dropdown = GTK_DROP_DOWN (gtk_drop_down_new (G_LIST_MODEL (range_list), NULL));
   gtk_box_append (GTK_BOX (range_box), GTK_WIDGET (range_dropdown));
@@ -253,9 +254,9 @@ on_report_action (GSimpleAction *action,
 
   // Rounding
   GtkWidget *round_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
-  gtk_box_append (GTK_BOX (round_box), gtk_label_new ("Rounding:"));
+  gtk_box_append (GTK_BOX (round_box), gtk_label_new (_("Rounding:")));
   GtkStringList *round_list = gtk_string_list_new ((const char *[]) {
-    "None", "1 Minute", "5 Minutes", "10 Minutes", "15 Minutes", "30 Minutes", "1 Hour", NULL
+    _("None"), _("1 Minute"), _("5 Minutes"), _("10 Minutes"), _("15 Minutes"), _("30 Minutes"), _("1 Hour"), NULL
   });
   GtkDropDown *round_dropdown = GTK_DROP_DOWN (gtk_drop_down_new (G_LIST_MODEL (round_list), NULL));
   gtk_box_append (GTK_BOX (round_box), GTK_WIDGET (round_dropdown));
@@ -263,14 +264,14 @@ on_report_action (GSimpleAction *action,
 
   // Format
   GtkWidget *format_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
-  gtk_box_append (GTK_BOX (format_box), gtk_label_new ("Format:"));
-  GtkStringList *format_list = gtk_string_list_new ((const char *[]) {"Plain Text", "HTML", NULL});
+  gtk_box_append (GTK_BOX (format_box), gtk_label_new (_("Format:")));
+  GtkStringList *format_list = gtk_string_list_new ((const char *[]) {_("Plain Text"), _("HTML"), NULL});
   GtkDropDown *format_dropdown = GTK_DROP_DOWN (gtk_drop_down_new (G_LIST_MODEL (format_list), NULL));
   gtk_box_append (GTK_BOX (format_box), GTK_WIDGET (format_dropdown));
   gtk_box_append (GTK_BOX (content_area), format_box);
 
   // Task Selection (Checkbox list)
-  gtk_box_append (GTK_BOX (content_area), gtk_label_new ("Tasks:"));
+  gtk_box_append (GTK_BOX (content_area), gtk_label_new (_("Tasks:")));
   GtkWidget *scrolled = gtk_scrolled_window_new ();
   gtk_widget_set_size_request (scrolled, -1, 200);
   gtk_box_append (GTK_BOX (content_area), scrolled);
@@ -287,7 +288,27 @@ on_report_action (GSimpleAction *action,
     GtkWidget *check = gtk_check_button_new ();
     gtk_check_button_set_active (GTK_CHECK_BUTTON (check), TRUE);
     gtk_box_append (GTK_BOX (row), check);
-    gtk_box_append (GTK_BOX (row), gtk_label_new (gtimer_task_get_name (task)));
+    
+    // Task info box with name and project
+    GtkWidget *task_info_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
+    gtk_widget_set_valign (task_info_box, GTK_ALIGN_CENTER);
+    
+    // Task name
+    const char *task_name = gtimer_task_get_name (task);
+    GtkWidget *task_label = gtk_label_new (task_name);
+    gtk_widget_set_halign (task_label, GTK_ALIGN_START);
+    gtk_box_append (GTK_BOX (task_info_box), task_label);
+    
+    // Project name (secondary, dimmed)
+    const char *project_name = gtimer_task_get_project_name (task);
+    if (project_name && strlen (project_name) > 0) {
+      GtkWidget *project_label = gtk_label_new (project_name);
+      gtk_widget_set_halign (project_label, GTK_ALIGN_START);
+      gtk_widget_add_css_class (project_label, "dim-label");
+      gtk_box_append (GTK_BOX (task_info_box), project_label);
+    }
+    
+    gtk_box_append (GTK_BOX (row), task_info_box);
     gtk_list_box_append (GTK_LIST_BOX (task_list), row);
     g_object_set_data (G_OBJECT (row), "task-id", GINT_TO_POINTER (gtimer_task_get_id (task)));
     g_object_set_data (G_OBJECT (row), "check", check);
@@ -319,17 +340,17 @@ on_preferences_action (GSimpleAction *action, GVariant *parameter, gpointer user
 
   // General Page
   AdwPreferencesPage *page = ADW_PREFERENCES_PAGE (adw_preferences_page_new ());
-  adw_preferences_page_set_title (page, "General");
+  adw_preferences_page_set_title (page, _("General"));
   adw_preferences_page_set_icon_name (page, "preferences-system-symbolic");
   adw_preferences_window_add (ADW_PREFERENCES_WINDOW (dialog), page);
 
   AdwPreferencesGroup *group = ADW_PREFERENCES_GROUP (adw_preferences_group_new ());
-  adw_preferences_group_set_title (group, "Behavior");
+  adw_preferences_group_set_title (group, _("Behavior"));
   adw_preferences_page_add (page, group);
 
   // Auto Save
   AdwActionRow *auto_save_row = ADW_ACTION_ROW (adw_action_row_new ());
-  adw_preferences_row_set_title (ADW_PREFERENCES_ROW (auto_save_row), "Auto Save");
+  adw_preferences_row_set_title (ADW_PREFERENCES_ROW (auto_save_row), _("Auto Save"));
   GtkWidget *auto_save_switch = gtk_switch_new ();
   gtk_widget_set_valign (auto_save_switch, GTK_ALIGN_CENTER);
   adw_action_row_add_suffix (auto_save_row, auto_save_switch);
@@ -338,7 +359,7 @@ on_preferences_action (GSimpleAction *action, GVariant *parameter, gpointer user
 
   // Animate
   AdwActionRow *animate_row = ADW_ACTION_ROW (adw_action_row_new ());
-  adw_preferences_row_set_title (ADW_PREFERENCES_ROW (animate_row), "Animate Running Tasks");
+  adw_preferences_row_set_title (ADW_PREFERENCES_ROW (animate_row), _("Animate Running Tasks"));
   GtkWidget *animate_switch = gtk_switch_new ();
   gtk_widget_set_valign (animate_switch, GTK_ALIGN_CENTER);
   adw_action_row_add_suffix (animate_row, animate_switch);
@@ -347,7 +368,7 @@ on_preferences_action (GSimpleAction *action, GVariant *parameter, gpointer user
 
   // Resume
   AdwActionRow *resume_row = ADW_ACTION_ROW (adw_action_row_new ());
-  adw_preferences_row_set_title (ADW_PREFERENCES_ROW (resume_row), "Resume Timing on Startup");
+  adw_preferences_row_set_title (ADW_PREFERENCES_ROW (resume_row), _("Resume Timing on Startup"));
   GtkWidget *resume_switch = gtk_switch_new ();
   gtk_widget_set_valign (resume_switch, GTK_ALIGN_CENTER);
   adw_action_row_add_suffix (resume_row, resume_switch);
@@ -356,7 +377,7 @@ on_preferences_action (GSimpleAction *action, GVariant *parameter, gpointer user
 
   // Idle Detection Page
   page = ADW_PREFERENCES_PAGE (adw_preferences_page_new ());
-  adw_preferences_page_set_title (page, "Idle Detection");
+  adw_preferences_page_set_title (page, _("Idle Detection"));
   adw_preferences_page_set_icon_name (page, "preferences-desktop-screensaver-symbolic");
   adw_preferences_window_add (ADW_PREFERENCES_WINDOW (dialog), page);
 
@@ -365,7 +386,7 @@ on_preferences_action (GSimpleAction *action, GVariant *parameter, gpointer user
 
   // Idle Enable
   AdwActionRow *idle_enable_row = ADW_ACTION_ROW (adw_action_row_new ());
-  adw_preferences_row_set_title (ADW_PREFERENCES_ROW (idle_enable_row), "Enable Idle Detection");
+  adw_preferences_row_set_title (ADW_PREFERENCES_ROW (idle_enable_row), _("Enable Idle Detection"));
   GtkWidget *idle_enable_switch = gtk_switch_new ();
   gtk_widget_set_valign (idle_enable_switch, GTK_ALIGN_CENTER);
   adw_action_row_add_suffix (idle_enable_row, idle_enable_switch);
@@ -374,7 +395,7 @@ on_preferences_action (GSimpleAction *action, GVariant *parameter, gpointer user
 
   // Idle Threshold
   AdwActionRow *idle_threshold_row = ADW_ACTION_ROW (adw_action_row_new ());
-  adw_preferences_row_set_title (ADW_PREFERENCES_ROW (idle_threshold_row), "Idle Threshold (minutes)");
+  adw_preferences_row_set_title (ADW_PREFERENCES_ROW (idle_threshold_row), _("Idle Threshold (minutes)"));
   GtkWidget *idle_threshold_spin = gtk_spin_button_new (gtk_adjustment_new (15, 1, 120, 1, 10, 0), 1, 0);
   gtk_widget_set_valign (idle_threshold_spin, GTK_ALIGN_CENTER);
   adw_action_row_add_suffix (idle_threshold_row, idle_threshold_spin);
@@ -383,7 +404,7 @@ on_preferences_action (GSimpleAction *action, GVariant *parameter, gpointer user
 
   // Time Page
   page = ADW_PREFERENCES_PAGE (adw_preferences_page_new ());
-  adw_preferences_page_set_title (page, "Time");
+  adw_preferences_page_set_title (page, _("Time"));
   adw_preferences_page_set_icon_name (page, "preferences-system-time-symbolic");
   adw_preferences_window_add (ADW_PREFERENCES_WINDOW (dialog), page);
 
@@ -392,7 +413,7 @@ on_preferences_action (GSimpleAction *action, GVariant *parameter, gpointer user
 
   // Midnight Offset
   AdwActionRow *midnight_row = ADW_ACTION_ROW (adw_action_row_new ());
-  adw_preferences_row_set_title (ADW_PREFERENCES_ROW (midnight_row), "Day Start (Midnight Offset)");
+  adw_preferences_row_set_title (ADW_PREFERENCES_ROW (midnight_row), _("Day Start (Midnight Offset)"));
   GtkWidget *midnight_spin = gtk_spin_button_new (gtk_adjustment_new (0, 0, 23, 1, 1, 0), 1, 0);
   gtk_widget_set_valign (midnight_spin, GTK_ALIGN_CENTER);
   adw_action_row_add_suffix (midnight_row, midnight_spin);
@@ -431,13 +452,13 @@ on_about_action (GSimpleAction *action,
                          "authors", (const char *[]) {"Craig Knudsen", NULL},
                          "license-type", GTK_LICENSE_GPL_2_0,
                          "website", "http://www.k5n.us/gtimer.php",
-                         "website-label", "Website: k5n.us/gtimer",
-                         "comments", "3.0.0 (2026-02-10)\n"
+                         "website-label", _("Website: k5n.us/gtimer"),
+                         "comments", _("3.0.0 (2026-02-10)\n"
                                      "• Complete rewrite with GTK 4 and Libadwaita\n"
                                      "• Modernized UI with Search, Secondary Toolbar and Toast notifications\n"
                                      "• Improved data integrity with Auto-save and Midnight Rollover\n"
                                      "• Enhanced reporting with HTML support and search\n"
-                                     "• Robust idle detection for Wayland and X11",
+                                     "• Robust idle detection for Wayland and X11"),
                          NULL);
 }
 
@@ -449,8 +470,6 @@ on_save_action (GSimpleAction *action,
   (void)action;
   (void)parameter;
   (void)user_data;
-  
-  g_printerr ("DEBUG: Data saved.\n");
 }
 
 static void

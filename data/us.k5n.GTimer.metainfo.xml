@@ -18,11 +18,26 @@
       <li>Reports and annotations</li>
     </ul>
   </description>
-  <launchable type="desktop-id">org.craigknudsen.GTimer.desktop</launchable>
+  <launchable type="desktop-id">us.k5n.GTimer.desktop</launchable>
   <screenshots>
-    <!-- Add screenshots when available -->
+    <screenshot type="default">
+      <caption>Main window with task list showing projects, tasks, and time tracking</caption>
+      <image>https://raw.githubusercontent.com/craigk5n/gtimer/main/data/screenshots/gtimer-main-window.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Generate customizable reports with multiple format and time range options</caption>
+      <image>https://raw.githubusercontent.com/craigk5n/gtimer/main/data/screenshots/gtimer-report-window.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Edit tasks and assign them to projects for better organization</caption>
+      <image>https://raw.githubusercontent.com/craigk5n/gtimer/main/data/screenshots/gtimer-edit-task-window.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>View generated time reports with detailed breakdown by task and project</caption>
+      <image>https://raw.githubusercontent.com/craigk5n/gtimer/main/data/screenshots/gtimer-report-result-window.png</image>
+    </screenshot>
   </screenshots>
-  <url type="homepage">http://www.k5n.us/gtimer.php</url>
+  <url type="homepage">https://www.k5n.us/gtimer.php</url>
   <releases>
     <release version="3.0.0" date="2026-02-09">
       <description>

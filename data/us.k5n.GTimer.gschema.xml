@@ -2,11 +2,11 @@
 <schemalist gettext-domain="gtimer">
   <schema id="us.k5n.GTimer" path="/us/k5n/GTimer/">
     <key name="window-width" type="i">
-      <default>600</default>
+      <default>900</default>
       <summary>Window width</summary>
     </key>
     <key name="window-height" type="i">
-      <default>450</default>
+      <default>600</default>
       <summary>Window height</summary>
     </key>
     <key name="auto-save" type="b">
